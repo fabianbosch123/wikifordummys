@@ -1,0 +1,53 @@
+import { z } from 'zod';
+
+const bool = z
+  .enum(['true', 'false', '1', '0'])
+  .transform((v) => v === 'true' || v === '1');
+
+const schema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().positive().default(3001),
+    /** Öffentliche Adresse des Wikis, z. B. https://wiki.example.de (für Links und Origin-Prüfung) */
+    APP_ORIGIN: z.string().url(),
+    DATABASE_URL: z.string().min(1),
+    REDIS_URL: z.string().min(1),
+    /** 32 Byte als Base64 oder Hex; verschlüsselt TOTP-Geheimnisse (S2) */
+    ENCRYPTION_KEY: z.string().min(32),
+    /** Mindestens 32 Zeichen; Schlüssel für HMACs (Wiederherstellungscodes, Rate-Limit-Schlüssel) */
+    SESSION_SECRET: z.string().min(32),
+    /** false nur für lokale Entwicklung über http */
+    COOKIE_SECURE: bool.default('true'),
+    /** Anzahl vertrauenswürdiger Proxys vor der API (Caddy = 1) */
+    TRUST_PROXY: z.coerce.number().int().min(0).default(1),
+    SMTP_URL: z.string().optional(),
+    MAIL_FROM: z.string().default('wikifordummys <wiki@localhost>'),
+    /** Rate-Limits (S3) */
+    RATE_LOGIN_PER_MINUTE: z.coerce.number().int().positive().default(5),
+    RATE_RESET_PER_HOUR: z.coerce.number().int().positive().default(3),
+    RATE_API_PER_MINUTE: z.coerce.number().int().positive().default(300),
+    /** Argon2-Kosten; nur in Tests herabsetzen */
+    ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(65536),
+    ARGON2_TIME_COST: z.coerce.number().int().min(1).default(3),
+  })
+  .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {
+      ctx.addIssue({ code: 'custom', path: ['COOKIE_SECURE'], message: 'muss in Produktion true sein' });
+    }
+    if (env.NODE_ENV === 'production' && !env.APP_ORIGIN.startsWith('https://')) {
+      ctx.addIssue({ code: 'custom', path: ['APP_ORIGIN'], message: 'muss in Produktion mit https:// beginnen' });
+    }
+  });
+
+export type AppConfig = z.infer<typeof schema>;
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const parsed = schema.safeParse(env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
+    throw new Error(`Ungültige Konfiguration:\n${issues}`);
+  }
+  return parsed.data;
+}
+
+export const APP_CONFIG = Symbol('APP_CONFIG');

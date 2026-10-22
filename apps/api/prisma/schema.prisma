@@ -1,0 +1,139 @@
+// Datenmodell Meilenstein 1: Benutzer, Gruppen, Einladungen, 2FA, Audit-Log.
+// Spaces und Seiten folgen in Meilenstein 2.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  invited
+  active
+  deactivated
+}
+
+enum GlobalPermissionType {
+  admin
+  create_space
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  email         String     @unique
+  displayName   String     @map("display_name")
+  passwordHash  String?    @map("password_hash")
+  /// AES-256-GCM-verschlüsselt (S2)
+  totpSecret    String?    @map("totp_secret")
+  totpEnabled   Boolean    @default(false) @map("totp_enabled")
+  /// Zuletzt verwendeter TOTP-Zeitschritt, damit ein Code nur einmal gilt (S2)
+  totpLastStep  Int?       @map("totp_last_step")
+  status        UserStatus @default(invited)
+  failedLogins  Int        @default(0) @map("failed_logins")
+  lockedUntil   DateTime?  @map("locked_until")
+  lastLoginAt   DateTime?  @map("last_login_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  recoveryCodes  RecoveryCode[]
+  invitations    Invitation[]    @relation("InvitationUser")
+  invitesSent    Invitation[]    @relation("InvitationInviter")
+  passwordResets PasswordReset[]
+  groups         GroupMember[]
+  auditEntries   AuditLog[]
+
+  @@map("users")
+}
+
+model RecoveryCode {
+  id       String    @id @default(uuid()) @db.Uuid
+  userId   String    @map("user_id") @db.Uuid
+  codeHash String    @map("code_hash")
+  usedAt   DateTime? @map("used_at")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
+}
+
+model Invitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  email      String
+  tokenHash  String    @unique @map("token_hash")
+  invitedBy  String?   @map("invited_by") @db.Uuid
+  expiresAt  DateTime  @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation("InvitationUser", fields: [userId], references: [id], onDelete: Cascade)
+  inviter    User?     @relation("InvitationInviter", fields: [invitedBy], references: [id], onDelete: SetNull)
+
+  @@map("invitations")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+model Group {
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String             @unique
+  description String             @default("")
+  /// Systemgruppen (alle-benutzer, administratoren) können nicht gelöscht werden
+  system      Boolean            @default(false)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  members     GroupMember[]
+  permissions GlobalPermission[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId String @map("group_id") @db.Uuid
+  userId  String @map("user_id") @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+model GlobalPermission {
+  groupId    String               @map("group_id") @db.Uuid
+  permission GlobalPermissionType
+  group      Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, permission])
+  @@map("global_permissions")
+}
+
+/// Nur anhängen: UPDATE wird per Trigger verhindert (S12)
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  ip         String?
+  details    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_log")
+}
