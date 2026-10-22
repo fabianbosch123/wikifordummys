@@ -1,0 +1,14 @@
+{
+  "name": "@wiki/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.56.1",
+    "@types/node": "^22.18.0",
+    "otplib": "^12.0.1",
+    "typescript": "~5.9.3"
+  }
+}
