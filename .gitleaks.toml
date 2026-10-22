@@ -1,0 +1,11 @@
+# Secret-Scan (S13). Testdateien enthalten absichtlich Beispiel-Passwörter.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Testdaten"
+paths = [
+  '''apps/api/test/''',
+  '''apps/api/src/.*\.spec\.ts''',
+  '''e2e/''',
+]

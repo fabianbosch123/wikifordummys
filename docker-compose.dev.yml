@@ -1,0 +1,26 @@
+# Nur für die Entwicklung: Datenbank, Redis und ein Mail-Testpostfach.
+#   docker compose -f docker-compose.dev.yml up -d
+# Ports sind nur auf localhost erreichbar.
+name: wikifordummys-dev
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: wiki
+      POSTGRES_USER: wiki
+      POSTGRES_PASSWORD: wiki
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [devpg:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7
+    ports: ["127.0.0.1:6379:6379"]
+
+  # Weboberfläche unter http://localhost:8025 zeigt alle verschickten Mails
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["127.0.0.1:8025:8025", "127.0.0.1:1025:1025"]
+
+volumes:
+  devpg: {}
