@@ -22,6 +22,8 @@ FROM base AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out /app
+# Anhänge liegen außerhalb des Web-Roots in einem eigenen Volume (S7); ein neues Volume übernimmt diese Rechte
+RUN mkdir -p /var/lib/wiki/attachments && chown node:node /var/lib/wiki/attachments && chmod 700 /var/lib/wiki/attachments
 USER node
 EXPOSE 3001
 # Migrationen beim Start einspielen, dann die API starten

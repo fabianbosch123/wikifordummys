@@ -4,7 +4,9 @@ import type { PageDto, TreeNodeDto } from '@wiki/shared';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Attachments } from '@/components/Attachments';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { RestrictionsDialog } from '@/components/RestrictionsDialog';
 import { RichText } from '@/components/RichText';
 import { SpaceLayout } from '@/components/SpaceLayout';
 import { Alert, formatDate } from '@/components/ui';
@@ -67,6 +69,7 @@ function PageView() {
   const router = useRouter();
   const page = useApiData<PageDto>(`/pages/${id}`);
   const [moving, setMoving] = useState(false);
+  const [restricting, setRestricting] = useState(false);
   const [treeVersion, setTreeVersion] = useState(0);
   const [error, setError] = useState('');
 
@@ -105,6 +108,11 @@ function PageView() {
                   Verschieben
                 </button>
               )}
+              {p.canRestrict && (
+                <button className="small secondary" onClick={() => setRestricting(!restricting)}>
+                  Einschränkungen
+                </button>
+              )}
               {p.canDelete && (
                 <button className="small danger" onClick={() => remove(p)}>
                   Löschen
@@ -115,6 +123,22 @@ function PageView() {
           <p className="muted page-meta">
             Version {p.version} · zuletzt geändert {formatDate(p.updatedAt)}
             {p.updatedBy ? ` von ${p.updatedBy.displayName}` : ''}
+            {p.restricted.view && (
+              <>
+                {' '}
+                <span className="badge warn" title="Nur bestimmte Gruppen und Personen sehen diese Seite">
+                  🔒 Ansehen eingeschränkt
+                </span>
+              </>
+            )}
+            {p.restricted.edit && (
+              <>
+                {' '}
+                <span className="badge" title="Nur bestimmte Gruppen und Personen dürfen diese Seite bearbeiten">
+                  ✎ Bearbeiten eingeschränkt
+                </span>
+              </>
+            )}
           </p>
           <Alert>{error}</Alert>
           {moving && (
@@ -129,7 +153,19 @@ function PageView() {
               }}
             />
           )}
+          {restricting && (
+            <RestrictionsDialog
+              page={p}
+              onCancel={() => setRestricting(false)}
+              onDone={() => {
+                setRestricting(false);
+                setTreeVersion((v) => v + 1);
+                void page.reload();
+              }}
+            />
+          )}
           <RichText doc={p.content} />
+          <Attachments pageId={p.id} canEdit={p.canEdit} />
         </article>
       )}
     </SpaceLayout>

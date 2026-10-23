@@ -253,3 +253,29 @@ button.tool.active { background: var(--bg); border-color: var(--border); color: 
 .diff ins, .diff del { text-decoration: none; }
 del.diff-removed { text-decoration: line-through; }
 ins.diff-added { text-decoration: none; }
+
+/* ---------- Meilenstein 3: Rechte, Anhänge, Suche ---------- */
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+label.check input { width: auto; margin-top: 3px; }
+
+.topbar .search { display: flex; gap: 4px; }
+.topbar .search input { width: 200px; padding: 4px 8px; }
+
+.subject-list { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.subject-list li { display: flex; gap: 4px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.subject-list button { padding: 0 6px; font-size: 13px; }
+
+.attachments { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16px; }
+.attachment-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.attachment-list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.attachment-list img { width: 64px; height: 48px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; }
+.attachment-list .file-icon { width: 64px; height: 48px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--muted); }
+.attachment-list .name { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+
+.search-results { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.search-results a.title { font-weight: 600; font-size: 16px; }
+.search-results p { margin: 4px 0 0; }
+.search-results mark { background: var(--info-bg); color: inherit; font-weight: 600; padding: 0 1px; }
+fieldset.field { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }

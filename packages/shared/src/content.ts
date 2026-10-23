@@ -55,7 +55,7 @@ export function isSafeLinkHref(href: unknown): href is string {
   return /^(https?:\/\/[^/]|mailto:)/i.test(href);
 }
 
-/** Bilder nur über https oder als Pfad im Wiki (Uploads folgen mit Meilenstein 3) */
+/** Bilder nur über https oder als Pfad im Wiki (z. B. hochgeladene Anhänge unter /api/v1/attachments/…) */
 export function isSafeImageSrc(src: unknown): src is string {
   if (typeof src !== 'string' || src.length === 0 || src.length > CONTENT_LIMITS.maxUrlLength) return false;
   // eslint-disable-next-line no-control-regex

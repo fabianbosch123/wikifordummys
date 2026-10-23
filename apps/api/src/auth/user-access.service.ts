@@ -25,7 +25,13 @@ export class UserAccessService {
   async loadActive(userId: string): Promise<AuthUser | null> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.status !== 'active') return null;
-    const perms = await this.globalPermissions(user.id);
+    const [perms, groups] = await Promise.all([
+      this.globalPermissions(user.id),
+      this.prisma.group.findMany({
+        where: { OR: [{ name: SYSTEM_GROUPS.ALL_USERS }, { members: { some: { userId } } }] },
+        select: { id: true },
+      }),
+    ]);
     return {
       id: user.id,
       email: user.email,
@@ -33,6 +39,7 @@ export class UserAccessService {
       totpEnabled: user.totpEnabled,
       isAdmin: perms.has('admin'),
       canCreateSpace: perms.has('admin') || perms.has('create_space'),
+      groupIds: groups.map((g) => g.id),
     };
   }
 

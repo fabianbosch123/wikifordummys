@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
 import { Auth } from '../common/decorators';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
 import { PagesService } from '../pages/pages.service';
-import { CreateSpaceDto, ListSpacesQuery, UpdateSpaceDto } from './spaces.dto';
+import { CreateSpaceDto, ListSpacesQuery, SetSpacePermissionsDto, UpdateSpaceDto } from './spaces.dto';
 import { SpacesService } from './spaces.service';
 
 @Controller('spaces')
@@ -40,5 +40,15 @@ export class SpacesController {
   @Get(':key/trash')
   trash(@Param('key') key: string, @Auth() ctx: AuthContext) {
     return this.pages.trash(ctx.user, key);
+  }
+
+  @Get(':key/permissions')
+  permissions(@Param('key') key: string, @Auth() ctx: AuthContext) {
+    return this.spaces.permissionsOf(ctx.user, key);
+  }
+
+  @Put(':key/permissions')
+  setPermissions(@Param('key') key: string, @Body() dto: SetSpacePermissionsDto, @Auth() ctx: AuthContext, @Req() req: WikiRequest) {
+    return this.spaces.setPermissions(key, dto, ctx, clientIp(req));
   }
 }

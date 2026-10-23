@@ -3,12 +3,13 @@
 Selbst gehostetes, Confluence-ähnliches Wiki mit integrierter Benutzerverwaltung für Ubuntu.
 Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, pflegt es gemeinsam und findet es über die Volltextsuche.
 
-**Stand: Meilenstein 2 (Spaces und Seiten).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1) sowie Spaces, Seitenbaum, Editor und Versionen (M2) sind fertig. Rechte je Space, Anhänge und Suche folgen mit Meilenstein 3.
+**Stand: Meilenstein 3 (Rechte, Anhänge, Suche).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1), Spaces, Seitenbaum, Editor und Versionen (M2) sowie Rollen je Space, Seiteneinschränkungen, Anhänge und Volltextsuche (M3) sind fertig. Als Nächstes folgt der Go-live (M4).
 
 ## Inhalt
 
 - [Funktionen in Meilenstein 1](#funktionen-in-meilenstein-1)
 - [Funktionen in Meilenstein 2](#funktionen-in-meilenstein-2)
+- [Funktionen in Meilenstein 3](#funktionen-in-meilenstein-3)
 - [Aufbau](#aufbau)
 - [Betrieb auf Ubuntu 24.04](#betrieb-auf-ubuntu-2404)
 - [Lokale Entwicklung](#lokale-entwicklung)
@@ -31,11 +32,19 @@ Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, p
 
 - **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite; archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus.
 - **Seitenbaum** beliebig tief, mit Brotkrumen; Seiten per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
-- **Editor (TipTap):** Überschriften, Fett/Kursiv/Durchgestrichen/Code, Listen, Zitate, Code-Blöcke, Tabellen, Bilder (per https-Adresse), Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Gespeichert wird JSON, kein HTML.
+- **Editor (TipTap):** Überschriften, Fett/Kursiv/Durchgestrichen/Code, Listen, Zitate, Code-Blöcke, Tabellen, Bilder (per https-Adresse, ab M3 auch hochgeladen), Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Gespeichert wird JSON, kein HTML.
 - **Versionen:** Jede Speicherung ist eine unveränderliche Version. Verlauf mit zeilenweisem Vergleich zweier Versionen; alte Versionen lassen sich ansehen und als neue Version wiederherstellen.
 - **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.
 - **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt.
-- **Rechte bis Meilenstein 3:** Alle aktiven Benutzer lesen und bearbeiten alle Spaces. Space-Admins (Ersteller und Systemadmins) ändern Einstellungen, archivieren und löschen Seiten. Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`). Frei vergebbare Space-Rollen und Seiteneinschränkungen kommen mit Meilenstein 3.
+- Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`).
+
+## Funktionen in Meilenstein 3
+
+- **Rollen je Space** für Gruppen und einzelne Personen: *Leser* sehen die Seiten, *Bearbeiter* legen Seiten an, ändern und verschieben sie und laden Anhänge hoch, *Space-Admins* verwalten zusätzlich Einstellungen, Rollen und den Papierkorb. Es gilt die höchste Rolle aus Person und Gruppen; die Gruppe `alle-benutzer` umfasst jedes aktive Konto. Wer keine Rolle hat, sieht den Space nicht (404). Systemadministratoren sind in jedem Space Admin. Gepflegt wird das unter **Space-Einstellungen → Rollen**.
+- **Neue Spaces** sind standardmäßig offen (Ersteller Space-Admin, `alle-benutzer` Bearbeiter); beim Anlegen lässt sich das abwählen, dann sieht ihn zunächst nur der Ersteller. Bestehende Spaces aus Meilenstein 2 werden bei der Migration genau so eingerichtet, es ändert sich also nichts.
+- **Seiteneinschränkungen** „Ansehen“ und „Bearbeiten“ auf Gruppen oder Personen, Schaltfläche **Einschränkungen** auf der Seite. Sie gelten für die Seite und alle Unterseiten und verengen nur: jede Einschränkung entlang des Pfads muss erfüllt sein. Eingeschränkte Seiten verschwinden für andere aus Baum, Suche und Anhängen (404). Space-Admins sind nicht eingeschränkt, damit keine Seite unerreichbar wird; Bearbeiter können sich nicht selbst aussperren.
+- **Anhänge** je Seite (bis 50 MB, einstellbar über `ATTACHMENT_MAX_MB`): Bilder mit Vorschau, PDF öffnet im Browser, alles andere wird heruntergeladen. Im Editor lassen sich Bilder direkt hochladen und einbinden. Anhänge liegen im Volume `attachments` unter zufälligem Namen.
+- **Volltextsuche** über Titel und Inhalt mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben, Filter nach Space; immer nur über Seiten, die man sehen darf. Suchfeld oben in der Kopfzeile.
 
 ## Aufbau
 
@@ -157,6 +166,12 @@ Bis zur automatischen Sicherung mit restic (Meilenstein 4) mindestens nächtlich
 docker compose -f /opt/wikifordummys/docker-compose.yml exec -T db pg_dump -U wiki wiki | gzip > /var/backups/wiki-$(date +%F).sql.gz
 ```
 
+Die Anhänge liegen im Docker-Volume `attachments` und gehören ebenfalls ins Backup, z. B.:
+
+```bash
+docker run --rm -v wikifordummys_attachments:/data:ro -v /var/backups:/backup busybox tar czf /backup/wiki-anhaenge-$(date +%F).tar.gz -C /data .
+```
+
 Zusätzlich die Datei `.env` sicher (verschlüsselt) aufbewahren. Ohne `ENCRYPTION_KEY` sind die 2FA-Geheimnisse aus einem Backup nicht mehr nutzbar.
 
 ### Logs
@@ -223,12 +238,15 @@ Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. U
 | S4 | Sitzungen | Serverseitig in Redis (nur Hash der Session-ID); Cookie `__Host-session`, HttpOnly, Secure, SameSite=Lax; neue Session-ID nach Passwort und nach 2FA; 12 h Leerlauf, 14 Tage absolut; Passwortänderung beendet alle anderen Sitzungen | `auth.spec.ts` |
 | S5 | CSRF | SameSite-Cookie plus Double-Submit-Token (`__Host-csrf` / Header `X-CSRF-Token`) bei allen ändernden Anfragen; Origin- und Referer-Prüfung | `auth.spec.ts` |
 | S6 | XSS | Seiten als TipTap-JSON; die API lässt nur erlaubte Knoten, Marks und Attribute zu und prüft Link- und Bild-Adressen (kein `javascript:`, `data:` usw.); die Weboberfläche rendert nur diese Knoten als React-Elemente, ohne `dangerouslySetInnerHTML` (Linter-Regel); eingefügtes HTML wird mit DOMPurify bereinigt; Content-Security-Policy mit Nonce je Anfrage (`script-src 'self' 'nonce-…' 'strict-dynamic'`) | `content.spec.ts`, `pages.spec.ts` (API und E2E) |
-| S8 | Autorisierung | Zentraler Guard („verweigern“ als Standard) plus `PermissionService` als einzige Stelle für Space- und Seitenrechte; ohne Rolle 404; Baum und Listen nutzen dieselbe Prüfung | `pages.spec.ts`: jede Route ohne Anmeldung, ohne 2FA, ohne Recht |
-| S9 | Eingaben | Alle DTOs validiert, unbekannte Felder abgelehnt, Inhalte zusätzlich per Whitelist geprüft; nur parametrisierte SQL-Abfragen | `pages.spec.ts` |
+| S7 | Uploads | Höchstgröße (Standard 50 MiB) in Caddy und API, Abbruch beim Streamen ohne Reste; Typ wird am Inhalt erkannt (PNG, JPEG, GIF, WebP, PDF), alles andere inklusive HTML und SVG ist `application/octet-stream` mit `Content-Disposition: attachment`; Ablage außerhalb des Web-Roots unter zufälligem Namen; Auslieferung nur mit Rechteprüfung, `nosniff` und `default-src 'none'` | `attachments.spec.ts` (HTML/SVG-Upload, Größe, Dateinamen), `m3.spec.ts` (E2E) |
+| S8 | Autorisierung | Zentraler Guard („verweigern“ als Standard) plus `PermissionService` als einzige Stelle für Space-Rollen und Seiteneinschränkungen; ohne Rolle oder bei Ansehen-Einschränkung 404; Baum, Space-Liste, Suche und Anhänge nutzen dieselbe Prüfung | `rights.spec.ts`: jede Route mit jeder Rolle (keine, Leser, Bearbeiter, Admin) und mit Einschränkung; `pages.spec.ts`: ohne Anmeldung, ohne 2FA |
+| S9 | Eingaben | Alle DTOs validiert, unbekannte Felder abgelehnt, Inhalte zusätzlich per Whitelist geprüft; nur parametrisierte SQL-Abfragen; Suchbegriffe werden auf Buchstaben und Ziffern reduziert, bevor sie in die tsquery gehen | `pages.spec.ts`, `rights.spec.ts`, `search.spec.ts` |
 | S10 | Keine Konto-Ausforschung | Gleiche Antwort und gleiche Argon2-Arbeit bei unbekannter E-Mail (Login, Reset); Sperren gelten auch für unbekannte Adressen | `auth.spec.ts` |
-| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen, Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten löschen und wiederherstellen, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts` |
+| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen (auch Space-Rollen und Seiteneinschränkungen), Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten und Anhänge löschen, Seiten wiederherstellen, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts`, `rights.spec.ts`, `attachments.spec.ts` |
 
-Außerdem: Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Die Upload-Prüfung (S7) und Rechtetests für frei vergebbare Space-Rollen (S8) kommen mit Meilenstein 3. Bilder werden bis dahin per https-Adresse eingebunden; dabei sieht der fremde Server die IP-Adresse der Lesenden.
+Außerdem: Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Bilder lassen sich weiterhin auch per https-Adresse einbinden; dabei sieht der fremde Server die IP-Adresse der Lesenden. Hochgeladene Bilder vermeiden das.
+
+Lesende Zugriffe von Systemadministratoren werden nicht einzeln ins Audit-Log geschrieben (das Konzept sah das vor); Änderungen schon. Grund: jeder Seitenaufruf eines Admins würde sonst einen Eintrag erzeugen.
 
 Hinweis zum Zurücksetzen der 2FA durch einen Admin: Danach kann sich die Person mit ihrem Passwort anmelden und die 2FA neu einrichten. Deshalb vorher die Identität der Person prüfen (z. B. telefonisch).
 
@@ -258,13 +276,18 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `POST /pages`, `GET/PUT/DELETE /pages/:id` | Seite anlegen, lesen, speichern (mit `version`, sonst 409), in den Papierkorb | Bearbeiter / Leser / Bearbeiter / Space-Admin |
 | `POST /pages/:id/move`, `POST /pages/:id/undelete` | Verschieben, aus dem Papierkorb holen | Bearbeiter / Space-Admin |
 | `GET /pages/:id/versions[/:version]`, `GET /pages/:id/diff?from=&to=`, `POST /pages/:id/restore/:version` | Verlauf, Vergleich, Wiederherstellen | Leser / Leser / Bearbeiter |
+| `GET/PUT /spaces/:key/permissions` | Rollen im Space | Space-Admin |
+| `GET/PUT /pages/:id/restrictions` | Seiteneinschränkungen (eigene und geerbte) | Leser / Bearbeiter |
+| `GET /pages/:id/attachments`, `POST /pages/:id/attachments?filename=` | Anhänge auflisten, hochladen (Datei als Body, `application/octet-stream`) | Leser / Bearbeiter |
+| `GET /attachments/:id[?download=1]`, `DELETE /attachments/:id` | Anhang abrufen, löschen | Leser / Bearbeiter |
+| `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert | angemeldet |
+| `GET /directory` | Aktive Benutzer und Gruppen für die Rechtevergabe (ohne E-Mail) | angemeldet |
 | `GET /health` | Datenbank, Redis, Speicherplatz | öffentlich |
 
 ## Nächste Meilensteine
 
 | Meilenstein | Inhalt |
 | --- | --- |
-| M3 Rechte, Anhänge, Suche | Space-Rollen, Seiteneinschränkungen, Uploads, Volltextsuche, Hintergrund-Worker |
 | M4 Go-live | Deployment, Backups mit restic, Monitoring, OWASP-ZAP-Scan, Pilotbetrieb |
-| M5 Zusammenarbeit | Kommentare, Benachrichtigungen, Vorlagen, Labels |
+| M5 Zusammenarbeit | Kommentare, Benachrichtigungen, Vorlagen, Labels; Hintergrund-Worker (BullMQ) für Mails und ggf. Volltext aus PDF-Anhängen |
 | M6 Ausbau | Gleichzeitiges Bearbeiten, Export, API-Tokens, Webhooks |

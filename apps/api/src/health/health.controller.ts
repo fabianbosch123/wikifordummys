@@ -2,6 +2,7 @@ import { Controller, Get, HttpException, Inject } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { statfs } from 'node:fs/promises';
 import { Public } from '../common/decorators';
+import { APP_CONFIG, AppConfig } from '../config';
 import { PrismaService } from '../infra/prisma.service';
 import { REDIS } from '../infra/redis';
 
@@ -10,6 +11,7 @@ export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS) private readonly redis: Redis,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @Public()
@@ -25,7 +27,7 @@ export class HealthController {
       () => (checks.redis = 'fehler'),
     );
     try {
-      const fs = await statfs(process.env.ATTACHMENTS_DIR ?? '/');
+      const fs = await statfs(this.config.ATTACHMENTS_DIR);
       const freeRatio = fs.bavail / fs.blocks;
       checks.disk = freeRatio > 0.1 ? 'ok' : 'knapp';
     } catch {

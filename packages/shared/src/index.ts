@@ -100,8 +100,9 @@ export const SPACE_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
 export const PAGE_TITLE_MAX_LENGTH = 200;
 
 export type SpaceStatus = 'active' | 'archived';
-/** Rolle im Space; ab Meilenstein 3 frei vergebbar, bis dahin Space-Admin = Ersteller und Systemadmins */
+/** Rolle im Space: admin verwaltet den Space, editor bearbeitet Seiten, viewer liest nur */
 export type SpaceRole = 'admin' | 'editor' | 'viewer';
+export const SPACE_ROLES: readonly SpaceRole[] = ['admin', 'editor', 'viewer'];
 
 export interface UserRefDto {
   id: string;
@@ -147,6 +148,10 @@ export interface PageDto {
   updatedAt: string;
   canEdit: boolean;
   canDelete: boolean;
+  /** Darf Einschränkungen der Seite ändern */
+  canRestrict: boolean;
+  /** Für die Seite gelten eigene oder geerbte Einschränkungen */
+  restricted: { view: boolean; edit: boolean };
 }
 
 export interface PageVersionSummaryDto {
@@ -191,3 +196,68 @@ export const TRASH_RETENTION_DAYS = 30;
 export interface ConflictBody {
   error: { code: 'CONFLICT'; message: string; current: PageDto };
 }
+
+// ---------- Rechte, Anhänge, Suche (Meilenstein 3) ----------
+
+/** Gruppe oder einzelner Benutzer, dem ein Recht gegeben wird */
+export interface SubjectDto {
+  type: 'group' | 'user';
+  id: string;
+  /** Gruppenname bzw. Anzeigename */
+  name: string;
+}
+
+export interface SpacePermissionDto {
+  subject: SubjectDto;
+  role: SpaceRole;
+}
+
+export type RestrictionType = 'view' | 'edit';
+
+export interface PageRestrictionsDto {
+  /** Eigene Einschränkungen der Seite; leere Liste = keine Einschränkung dieser Art */
+  view: SubjectDto[];
+  edit: SubjectDto[];
+  /** Vorfahren, deren Einschränkungen zusätzlich gelten */
+  inherited: { pageId: string; title: string; type: RestrictionType }[];
+}
+
+/** Benutzer und Gruppen zur Auswahl bei Rechten (ohne E-Mail-Adressen) */
+export interface DirectoryDto {
+  users: UserRefDto[];
+  groups: { id: string; name: string }[];
+}
+
+export const ATTACHMENT_DEFAULT_MAX_MB = 50;
+
+export interface AttachmentDto {
+  id: string;
+  pageId: string;
+  filename: string;
+  /** Am Inhalt erkannter Typ; unbekannte Typen sind application/octet-stream */
+  mimeType: string;
+  sizeBytes: number;
+  /** Bilder werden im Browser angezeigt, PDF im Browser geöffnet; alles andere wird heruntergeladen */
+  preview: 'image' | 'pdf' | null;
+  uploadedBy: UserRefDto | null;
+  createdAt: string;
+  /** Adresse zum Abrufen, z. B. für Bilder in Seiten */
+  url: string;
+}
+
+export interface SearchHitDto {
+  id: string;
+  title: string;
+  spaceKey: string;
+  spaceName: string;
+  /** Textausschnitt; match = Treffer zum Hervorheben */
+  snippet: { text: string; match: boolean }[];
+  updatedAt: string;
+}
+
+export interface SearchResultDto {
+  results: SearchHitDto[];
+  hasMore: boolean;
+}
+
+export const SEARCH_PAGE_SIZE = 20;

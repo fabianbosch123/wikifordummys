@@ -34,4 +34,5 @@ export const Errors = {
   conflict: (message: string, extra: Record<string, unknown> = {}) => new ApiError(409, 'CONFLICT', message, extra),
   spaceArchived: () => new ApiError(403, 'SPACE_ARCHIVED', 'Der Space ist archiviert und kann nicht bearbeitet werden.'),
   invalidContent: (message: string) => new ApiError(400, 'INVALID_CONTENT', message),
+  tooLarge: (maxMb: number) => new ApiError(413, 'TOO_LARGE', `Die Datei ist zu groß (höchstens ${maxMb} MB).`),
 };

@@ -14,6 +14,7 @@ function CreateSpace() {
   const [key, setKey] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [open, setOpen] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -22,7 +23,7 @@ function CreateSpace() {
     setBusy(true);
     setError('');
     try {
-      const space = await api<SpaceDto>('/spaces', { method: 'POST', body: { key, name, description } });
+      const space = await api<SpaceDto>('/spaces', { method: 'POST', body: { key, name, description, open } });
       router.push(`/pages/${space.homePageId}`);
     } catch (err) {
       setError(errorMessage(err));
@@ -44,6 +45,10 @@ function CreateSpace() {
         />
         <Field label="Name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         <Field label="Beschreibung" maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <label className="check">
+          <input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} />
+          Alle Benutzer dürfen lesen und bearbeiten (sonst nur du; weitere Rollen vergibst du in den Space-Einstellungen)
+        </label>
         <Alert>{error}</Alert>
         <div className="row">
           <button type="submit" disabled={busy}>

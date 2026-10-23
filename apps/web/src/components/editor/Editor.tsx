@@ -6,7 +6,8 @@ import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/r
 import StarterKit from '@tiptap/starter-kit';
 import { isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
-import { ReactNode, useState } from 'react';
+import { ChangeEvent, ReactNode, useRef, useState } from 'react';
+import { errorMessage, uploadAttachment } from '@/lib/api';
 import { flattenTree } from '@/lib/tree';
 import { Callout } from './callout';
 
@@ -97,8 +98,10 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: { i
   );
 }
 
-function Toolbar({ editor, pages }: { editor: Editor; pages: TreeNodeDto[] }) {
+function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto[]; pageId?: string }) {
   const [picker, setPicker] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -141,11 +144,32 @@ function Toolbar({ editor, pages }: { editor: Editor; pages: TreeNodeDto[] }) {
     const src = window.prompt('Adresse des Bildes (https://…)', 'https://');
     if (!src) return;
     if (!isSafeImageSrc(src.trim())) {
-      window.alert('Bilder sind nur über https:// erlaubt. Hochladen folgt mit Meilenstein 3.');
+      window.alert('Bilder sind nur über https:// erlaubt. Eigene Bilder lassen sich hochladen.');
       return;
     }
     const alt = window.prompt('Kurze Beschreibung des Bildes (für Screenreader)') ?? '';
     chain().setImage({ src: src.trim(), alt }).run();
+  }
+
+  /** Lädt ein Bild als Anhang der Seite hoch und bindet es ein */
+  async function uploadImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !pageId) return;
+    setUploading(true);
+    try {
+      const attachment = await uploadAttachment(pageId, file);
+      if (attachment.preview !== 'image') {
+        window.alert('Die Datei wurde als Anhang gespeichert, ist aber kein Bild (PNG, JPEG, GIF oder WebP) und wird nicht eingebunden.');
+        return;
+      }
+      const alt = window.prompt('Kurze Beschreibung des Bildes (für Screenreader)') ?? '';
+      chain().setImage({ src: attachment.url, alt }).run();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    } finally {
+      setUploading(false);
+    }
   }
 
   function toggleCallout(variant: CalloutVariant) {
@@ -215,9 +239,17 @@ function Toolbar({ editor, pages }: { editor: Editor; pages: TreeNodeDto[] }) {
         <ToolButton label="Seite verlinken" onClick={() => setPicker(!picker)} disabled={pages.length === 0}>
           ↪ Seite
         </ToolButton>
-        <ToolButton label="Bild" onClick={addImage}>
+        <ToolButton label="Bild über Adresse einbinden" onClick={addImage}>
           🖼
         </ToolButton>
+        {pageId && (
+          <>
+            <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={uploadImage} />
+            <ToolButton label="Bild hochladen" disabled={uploading} onClick={() => imageInput.current?.click()}>
+              ⤒ Bild
+            </ToolButton>
+          </>
+        )}
         <ToolButton label="Tabelle einfügen" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
           ▦
         </ToolButton>
@@ -253,10 +285,13 @@ function Toolbar({ editor, pages }: { editor: Editor; pages: TreeNodeDto[] }) {
 export function WikiEditor({
   initial,
   pages,
+  pageId,
   onChange,
 }: {
   initial: DocNode;
   pages: TreeNodeDto[];
+  /** Bestehende Seite: Bilder lassen sich als Anhang hochladen */
+  pageId?: string;
   onChange: (doc: DocNode) => void;
 }) {
   const editor = useEditor({
@@ -273,7 +308,7 @@ export function WikiEditor({
   if (!editor) return <p className="muted">Editor wird geladen …</p>;
   return (
     <div className="editor">
-      <Toolbar editor={editor} pages={pages} />
+      <Toolbar editor={editor} pages={pages} pageId={pageId} />
       <EditorContent editor={editor} />
     </div>
   );

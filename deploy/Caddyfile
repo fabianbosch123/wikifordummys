@@ -15,8 +15,14 @@
 		-Server
 	}
 
-	# Größere Anfragen sind erst mit Anhängen (Meilenstein 3) nötig
-	request_body {
+	# Uploads von Anhängen dürfen groß sein (ATTACHMENT_MAX_MB, Standard 50 MiB; die API prüft die genaue Grenze),
+	# alle anderen Anfragen bleiben klein. Die beiden Matcher schließen sich aus.
+	@upload path_regexp ^/api/v1/pages/[^/]+/attachments$
+	@notUpload not path_regexp ^/api/v1/pages/[^/]+/attachments$
+	request_body @upload {
+		max_size 51MiB
+	}
+	request_body @notUpload {
 		max_size 2MB
 	}
 

@@ -1,14 +1,18 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import { Auth } from '../common/decorators';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
-import { CreatePageDto, DiffQuery, MovePageDto, UpdatePageDto } from './pages.dto';
+import { CreatePageDto, DiffQuery, MovePageDto, SetRestrictionsDto, UpdatePageDto } from './pages.dto';
 import { PagesService } from './pages.service';
+import { RestrictionsService } from './restrictions.service';
 
 const uuid = new ParseUUIDPipe({ version: undefined });
 
 @Controller('pages')
 export class PagesController {
-  constructor(private readonly pages: PagesService) {}
+  constructor(
+    private readonly pages: PagesService,
+    private readonly restrictions: RestrictionsService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreatePageDto, @Auth() ctx: AuthContext) {
@@ -62,5 +66,15 @@ export class PagesController {
   @HttpCode(200)
   restore(@Param('id', uuid) id: string, @Param('version', ParseIntPipe) version: number, @Auth() ctx: AuthContext) {
     return this.pages.restoreVersion(id, version, ctx);
+  }
+
+  @Get(':id/restrictions')
+  getRestrictions(@Param('id', uuid) id: string, @Auth() ctx: AuthContext) {
+    return this.restrictions.get(ctx.user, id);
+  }
+
+  @Put(':id/restrictions')
+  setRestrictions(@Param('id', uuid) id: string, @Body() dto: SetRestrictionsDto, @Auth() ctx: AuthContext, @Req() req: WikiRequest) {
+    return this.restrictions.set(id, dto, ctx, clientIp(req));
   }
 }

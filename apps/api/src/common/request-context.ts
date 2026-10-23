@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { MeDto } from '@wiki/shared';
 import type { ActiveSession } from '../auth/session.service';
 
 export interface AuthUser {
@@ -8,6 +9,13 @@ export interface AuthUser {
   isAdmin: boolean;
   canCreateSpace: boolean;
   totpEnabled: boolean;
+  /** Alle Gruppen des Benutzers einschließlich der impliziten Gruppe alle-benutzer */
+  groupIds: string[];
+}
+
+/** Profil für die Weboberfläche, ohne interne Felder */
+export function meDto({ groupIds: _groupIds, ...me }: AuthUser): MeDto {
+  return me;
 }
 
 export interface AuthContext {

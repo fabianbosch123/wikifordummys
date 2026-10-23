@@ -4,6 +4,7 @@ import type { SpaceDto } from '@wiki/shared';
 import { useParams } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { SpaceLayout } from '@/components/SpaceLayout';
+import { SpacePermissions } from '@/components/SpacePermissions';
 import { Alert, Card, Field } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
@@ -49,6 +50,7 @@ function SettingsForm({ space }: { space: SpaceDto }) {
           </div>
         </form>
       </Card>
+      <SpacePermissions space={space} />
       <Card title="Archivieren">
         <p className="muted">
           Archivierte Spaces bleiben lesbar, können aber nicht mehr bearbeitet werden und erscheinen in der Übersicht nur unter „Archiv“.

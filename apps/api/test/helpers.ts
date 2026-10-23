@@ -35,7 +35,7 @@ export async function startApp(): Promise<TestContext> {
 /** Leert alle Tabellen außer den Systemgruppen und die Test-Redis-DB. */
 export async function resetState(ctx: TestContext) {
   await ctx.prisma.$executeRaw`ALTER TABLE audit_log DISABLE TRIGGER audit_log_no_update`;
-  await ctx.prisma.$executeRaw`TRUNCATE page_versions, pages, spaces, audit_log, recovery_codes, invitations, password_resets, group_members, users CASCADE`;
+  await ctx.prisma.$executeRaw`TRUNCATE attachments, page_restrictions, space_permissions, page_versions, pages, spaces, audit_log, recovery_codes, invitations, password_resets, group_members, users CASCADE`;
   await ctx.prisma.$executeRaw`ALTER TABLE audit_log ENABLE TRIGGER audit_log_no_update`;
   await ctx.prisma.group.deleteMany({ where: { system: false } });
   // Globale Rechte der Systemgruppen wie nach der Migration
@@ -93,6 +93,13 @@ export class Client {
 
   delete(path: string) {
     return this.mutate('delete', path);
+  }
+
+  /** Lädt eine Datei wie die Weboberfläche hoch: Inhalt als Body, Name als Parameter */
+  upload(pageId: string, filename: string, data: Buffer, contentType = 'application/octet-stream') {
+    return this.mutate('post', `/pages/${pageId}/attachments?filename=${encodeURIComponent(filename)}`)
+      .set('Content-Type', contentType)
+      .send(data);
   }
 }
 
