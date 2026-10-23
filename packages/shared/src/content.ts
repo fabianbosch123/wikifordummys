@@ -26,12 +26,22 @@ export const CONTENT_LIMITS = {
   maxUrlLength: 2_000,
 } as const;
 
+/** Grenzen für die im Editor gezogene Bildgröße (Breite und Höhe in Pixeln) */
+export const IMAGE_SIZE = { min: 16, max: 5_000 } as const;
+
+/** Grenzen für die im Editor gezogene Spaltenbreite von Tabellen (Pixel) */
+export const COLUMN_WIDTH = { min: 40, max: 5_000 } as const;
+
 export class ContentError extends Error {}
 
 type AttrSanitizer = (attrs: Record<string, unknown>) => Record<string, unknown> | undefined;
 
 const intIn = (value: unknown, min: number, max: number): number | undefined =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+
+/** Bildgröße in Pixeln; der Editor liefert beim Ziehen auch Kommazahlen, gespeichert wird gerundet */
+const sizePx = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? intIn(Math.round(value), IMAGE_SIZE.min, IMAGE_SIZE.max) : undefined;
 
 const str = (value: unknown, max: number): string | undefined =>
   typeof value === 'string' && value.length <= max ? value : undefined;
@@ -64,12 +74,23 @@ export function isSafeImageSrc(src: unknown): src is string {
   return /^https:\/\/[^/]/i.test(src);
 }
 
+/**
+ * Spaltenbreiten einer Zelle (je überspannter Spalte ein Wert in Pixeln, 0 = automatisch),
+ * so wie sie das Ziehen am Spaltenrand im Editor setzt. Ungültige Angaben entfallen ganz.
+ */
+const colwidths = (value: unknown, colspan: number): number[] | undefined => {
+  if (!Array.isArray(value) || value.length !== colspan) return undefined;
+  const widths = value.map((w) => (typeof w === 'number' && Number.isFinite(w) ? intIn(Math.round(w), 0, COLUMN_WIDTH.max) : undefined));
+  if (widths.some((w) => w === undefined) || widths.every((w) => w === 0)) return undefined;
+  return widths.map((w) => (w && w < COLUMN_WIDTH.min ? COLUMN_WIDTH.min : (w as number)));
+};
+
 const cellAttrs: AttrSanitizer = (a) => {
-  const colwidth = Array.isArray(a.colwidth) && a.colwidth.every((w) => intIn(w, 1, 5000) !== undefined) ? a.colwidth : undefined;
+  const colspan = intIn(a.colspan, 1, 50) ?? 1;
   return compact({
-    colspan: intIn(a.colspan, 1, 50) ?? 1,
+    colspan,
     rowspan: intIn(a.rowspan, 1, 50) ?? 1,
-    colwidth: colwidth && colwidth.length <= 50 ? colwidth : undefined,
+    colwidth: colwidths(a.colwidth, colspan),
   });
 };
 
@@ -99,7 +120,7 @@ const NODES: Record<string, AttrSanitizer | null> = {
   tableCell: cellAttrs,
   image: (a) => {
     if (!isSafeImageSrc(a.src)) throw new ContentError('Bilder sind nur über https:// oder als Pfad im Wiki erlaubt.');
-    return compact({ src: a.src, alt: str(a.alt, 500), title: str(a.title, 500) });
+    return compact({ src: a.src, alt: str(a.alt, 500), title: str(a.title, 500), width: sizePx(a.width), height: sizePx(a.height) });
   },
   callout: (a) => {
     const variant = CALLOUT_VARIANTS.includes(a.variant as CalloutVariant) ? (a.variant as CalloutVariant) : 'info';
@@ -180,6 +201,34 @@ export function sanitizeDoc(input: unknown): DocNode {
   const doc = visit(input, 0);
   if (!doc.content) doc.content = [{ type: 'paragraph' }];
   return doc;
+}
+
+export interface TableLayout {
+  /** Breite je Spalte in Pixeln, null = automatisch */
+  columns: (number | null)[];
+  /** Feste Tabellenbreite, wenn alle Spalten eine Breite haben */
+  width?: number;
+  /** Sonst Mindestbreite der Tabelle (automatische Spalten mit Mindestbreite gerechnet) */
+  minWidth?: number;
+}
+
+/**
+ * Spaltenbreiten einer Tabelle aus der ersten Zeile, wie sie der Editor beim Ziehen speichert.
+ * Rechnet wie TipTap, damit die Ansicht der Seite dem Editor entspricht.
+ */
+export function tableLayout(table: DocNode, cellMinWidth: number = COLUMN_WIDTH.min): TableLayout {
+  const columns: (number | null)[] = [];
+  for (const cell of table.content?.[0]?.content ?? []) {
+    const colspan = Number(cell.attrs?.colspan ?? 1);
+    const widths = Array.isArray(cell.attrs?.colwidth) ? (cell.attrs.colwidth as unknown[]) : [];
+    for (let i = 0; i < colspan && columns.length < 1000; i++) {
+      const w = widths[i];
+      columns.push(typeof w === 'number' && w > 0 ? Math.max(w, cellMinWidth) : null);
+    }
+  }
+  if (columns.length === 0) return { columns };
+  const total = columns.reduce<number>((sum, w) => sum + (w ?? cellMinWidth), 0);
+  return columns.every((w) => w !== null) ? { columns, width: total } : { columns, minWidth: total };
 }
 
 export const EMPTY_DOC: DocNode = { type: 'doc', content: [{ type: 'paragraph' }] };
