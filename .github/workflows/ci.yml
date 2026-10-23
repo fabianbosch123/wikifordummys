@@ -171,6 +171,9 @@ jobs:
           sudo wikictl status | grep -q "Office-Editor bereit"
           sudo wikictl office off
           test -z "$(sudo docker compose --profile office ps -q office)"
+          # Aufräumen lässt laufende Dienste und Volumes in Ruhe
+          sudo wikictl cleanup
+          sudo wikictl monitor
       - name: OWASP ZAP Baseline-Scan
         if: matrix.mode == 'internal'
         run: |
