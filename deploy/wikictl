@@ -72,11 +72,18 @@ cmd_status() {
     warn "API antwortet nicht."
   if [[ $(env_get WIKI_OFFICE) == true ]]; then
     step "Office-Editor"
-    if compose exec -T office sh -c "printf 'GET /healthcheck HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 80" 2>/dev/null | grep -q true; then
-      ok "Office-Editor bereit."
-    else
-      warn "Office-Editor antwortet nicht (wikictl logs office)."
-    fi
+    # Ergebnis der Gesundheitsprüfung aus docker-compose.yml, bei Fehlern mit der letzten Ausgabe
+    local id health
+    id=$(compose ps -q office 2>/dev/null || true)
+    health=$([[ -n $id ]] && docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || true)
+    case $health in
+      healthy) ok "Office-Editor bereit." ;;
+      starting) warn "Office-Editor startet noch (beim ersten Start einige Minuten)." ;;
+      *)
+        warn "Office-Editor antwortet nicht (${health:-läuft nicht}; wikictl logs office)."
+        [[ -n $id ]] && docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{.ExitCode}}: {{.Output}}{{end}}{{end}}' "$id" 2>/dev/null | tail -n 3 || true
+        ;;
+    esac
   fi
   if [[ ${tls:-letsencrypt} != proxy ]]; then
     step "Zertifikat"
