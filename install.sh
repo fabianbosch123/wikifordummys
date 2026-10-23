@@ -357,11 +357,10 @@ ask_office() {
   info "Mit Euro-Office lassen sich Word-, Excel- und PowerPoint-Anhänge (auch OpenDocument) direkt im Wiki"
   info "ansehen und gemeinsam bearbeiten; jedes Speichern legt eine neue Fassung des Anhangs an."
   info "Der Editor läuft als zusätzlicher Container unter https://$WIKI_DOMAIN/office/ und braucht etwa 4 GB Arbeitsspeicher mehr."
-  local default=j mem_kb
+  local default=j
   if [[ $CUR_OFFICE == false ]]; then default=n; fi
-  mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-  if ((mem_kb > 0 && mem_kb < 7000000)); then
-    warn "Dieser Server hat $((mem_kb / 1024 / 1024)) GB Arbeitsspeicher; für Wiki und Editor sind 8 GB empfohlen."
+  if ! office_mem_ok; then
+    warn "Dieser Server hat $(mem_gb) GB Arbeitsspeicher; für Wiki und Editor sind 8 GB empfohlen."
     if [[ -z $CUR_OFFICE ]]; then default=n; fi
   fi
   ask_yes OFFICE_ENABLE "Office-Editor einrichten?" "$default"
@@ -615,24 +614,9 @@ start_stack() {
     die "Die API ist nicht gesund geworden. Logs oben; nach Korrektur ./install.sh erneut starten."
   fi
   ok "API läuft."
+  reload_caddy
   check_through_caddy
-  check_office
-}
-
-# Der Editor braucht beim ersten Start einige Minuten (Schriften, interne Datenbank)
-check_office() {
-  [[ $WIKI_OFFICE == true ]] || return 0
-  info "Warte auf den Office-Editor (beim ersten Start einige Minuten) …"
-  local i state
-  for i in $(seq 1 60); do
-    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q office 2>/dev/null)" 2>/dev/null || true)
-    if [[ $state == healthy ]]; then
-      ok "Office-Editor läuft."
-      return 0
-    fi
-    sleep 5
-  done
-  warn "Der Office-Editor ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs office"
+  wait_office
 }
 
 check_through_caddy() {

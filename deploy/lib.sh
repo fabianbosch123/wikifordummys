@@ -102,6 +102,45 @@ wait_healthy() {
   return 1
 }
 
+# Caddy liest seine Konfiguration (deploy/caddy, als Volume eingebunden) nur beim Start. Nach Updates
+# und Neukonfiguration neu laden, sonst gelten neue Routen und Header erst nach einem Neustart.
+reload_caddy() {
+  local tls
+  tls=$(env_get WIKI_TLS)
+  compose exec -T caddy caddy reload --config "/etc/caddy/${tls:-letsencrypt}.Caddyfile" --adapter caddyfile >/dev/null 2>&1 ||
+    compose restart caddy >/dev/null
+}
+
+# Wartet auf den Office-Editor, falls eingeschaltet (beim ersten Start einige Minuten: Schriften, interne Datenbank)
+wait_office() {
+  [[ $(env_get WIKI_OFFICE) == true ]] || return 0
+  info "Warte auf den Office-Editor (beim ersten Start einige Minuten) …"
+  local i state
+  for i in $(seq 1 60); do
+    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q office 2>/dev/null)" 2>/dev/null || true)
+    if [[ $state == healthy ]]; then
+      ok "Office-Editor läuft."
+      return 0
+    fi
+    sleep 5
+  done
+  warn "Der Office-Editor ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs office"
+}
+
+# Schaltet den Office-Editor in .env an oder aus; das JWT-Geheimnis wird nur erzeugt, wenn es fehlt
+office_set() {
+  local enable=$1 secret
+  env_set WIKI_OFFICE "$enable"
+  secret=$(env_get OFFICE_JWT_SECRET)
+  if [[ ${#secret} -lt 32 || $secret == bitte-* ]]; then
+    env_set OFFICE_JWT_SECRET "$(openssl rand -hex 32)"
+  fi
+}
+
+# Arbeitsspeicher in GB (abgerundet) und ob er für Wiki plus Office-Editor reicht (8 GB empfohlen)
+mem_gb() { awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo 2>/dev/null || echo 0; }
+office_mem_ok() { (($(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0) >= 7000000)); }
+
 # Ruft eine Push-Adresse der Überwachung auf (Fehler werden ignoriert)
 ping_url() {
   [[ -n $1 ]] || return 0

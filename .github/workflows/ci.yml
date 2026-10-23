@@ -158,9 +158,19 @@ jobs:
             echo "$path → $code"
             test "$code" = 404
           done
-      - name: Ohne Office-Editor läuft kein Container office
+      - name: Bestehende Installation ohne Editor-Einstellung, Update, Editor nachträglich einschalten
         if: matrix.office == 'n'
-        run: test -z "$(sudo docker compose --profile office ps -q office)"
+        run: |
+          test -z "$(sudo docker compose --profile office ps -q office)"
+          # Stand vor dem Office-Editor nachstellen: .env ohne WIKI_OFFICE und OFFICE_JWT_SECRET
+          sudo sed -i '/^WIKI_OFFICE=/d; /^OFFICE_JWT_SECRET=/d' .env
+          sudo wikictl update-apply </dev/null
+          sudo grep -q "^WIKI_OFFICE='false'" .env
+          test -z "$(sudo docker compose --profile office ps -q office)"
+          sudo wikictl office on
+          sudo wikictl status | grep -q "Office-Editor bereit"
+          sudo wikictl office off
+          test -z "$(sudo docker compose --profile office ps -q office)"
       - name: OWASP ZAP Baseline-Scan
         if: matrix.mode == 'internal'
         run: |
