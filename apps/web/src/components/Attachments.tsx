@@ -1,6 +1,7 @@
 'use client';
 
-import type { AttachmentDto } from '@wiki/shared';
+import type { AttachmentDto, AttachmentVersionDto } from '@wiki/shared';
+import Link from 'next/link';
 import { ChangeEvent, useRef, useState } from 'react';
 import { Alert, formatDate } from '@/components/ui';
 import { api, errorMessage, uploadAttachment } from '@/lib/api';
@@ -12,7 +13,43 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`;
 }
 
-/** Anhänge einer Seite: Bilder mit Vorschau, PDF zum Öffnen im Browser, alles andere zum Herunterladen */
+/** Ältere Fassungen eines Anhangs (entstehen beim Speichern im Office-Editor), nur zum Herunterladen */
+function Versions({ attachment }: { attachment: AttachmentDto }) {
+  const [versions, setVersions] = useState<AttachmentVersionDto[] | null>(null);
+  const [error, setError] = useState('');
+
+  async function load() {
+    if (versions) return;
+    try {
+      setVersions(await api<AttachmentVersionDto[]>(`/attachments/${attachment.id}/versions`));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <details className="attachment-versions" onToggle={(e) => e.currentTarget.open && void load()}>
+      <summary>Fassung {attachment.version}</summary>
+      <Alert>{error}</Alert>
+      <ul>
+        {versions?.map((v) => (
+          <li key={v.version}>
+            {v.version === attachment.version ? (
+              <span>Fassung {v.version} (aktuell)</span>
+            ) : (
+              <a href={v.url}>Fassung {v.version}</a>
+            )}{' '}
+            <small className="muted">
+              {formatSize(v.sizeBytes)} · {v.createdBy?.displayName ?? 'unbekannt'} · {formatDate(v.createdAt)}
+            </small>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** Anhänge einer Seite: Bilder mit Vorschau, PDF zum Öffnen im Browser, Office-Dokumente im Editor, alles andere zum Herunterladen */
 export function Attachments({ pageId, canEdit }: { pageId: string; canEdit: boolean }) {
   const list = useApiData<AttachmentDto[]>(`/pages/${pageId}/attachments`);
   const input = useRef<HTMLInputElement>(null);
@@ -67,8 +104,20 @@ export function Attachments({ pageId, canEdit }: { pageId: string; canEdit: bool
               <br />
               <small className="muted">
                 {formatSize(a.sizeBytes)} · {a.uploadedBy?.displayName ?? 'unbekannt'} · {formatDate(a.createdAt)}
+                {a.version > 1 && <> · geändert {formatDate(a.updatedAt)}</>}
               </small>
+              {a.version > 1 && <Versions attachment={a} />}
             </span>
+            {a.office && (
+              <Link className="button small secondary" href={`/attachments/${a.id}/office?mode=view`}>
+                Ansehen
+              </Link>
+            )}
+            {a.office === 'edit' && (
+              <Link className="button small" href={`/attachments/${a.id}/office?mode=edit`}>
+                Bearbeiten
+              </Link>
+            )}
             <a className="button small secondary" href={`${a.url}?download=1`}>
               Herunterladen
             </a>

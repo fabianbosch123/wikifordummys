@@ -7,6 +7,8 @@ import { Errors } from './errors';
 import type { WikiRequest } from './request-context';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+/** Rückruf des Office-Editor-Servers: kommt ohne Cookies, ist stattdessen per JWT signiert (office.service.ts) */
+const EXEMPT_PATHS = new Set(['/api/v1/office/callback']);
 
 /**
  * CSRF-Schutz (S5): SameSite-Cookies plus Double Submit.
@@ -25,6 +27,7 @@ export class CsrfMiddleware implements NestMiddleware {
   }
 
   use(req: WikiRequest, res: Response, next: NextFunction) {
+    if (req.method === 'POST' && EXEMPT_PATHS.has(req.originalUrl.split('?')[0])) return next();
     const name = cookieNames(this.config).csrf;
     let token: string | undefined = req.cookies?.[name];
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {

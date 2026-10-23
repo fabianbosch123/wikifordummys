@@ -25,38 +25,39 @@ enum GlobalPermissionType {
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique
-  displayName  String     @map("display_name")
-  passwordHash String?    @map("password_hash")
+  id                 String     @id @default(uuid()) @db.Uuid
+  email              String     @unique
+  displayName        String     @map("display_name")
+  passwordHash       String?    @map("password_hash")
   /// AES-256-GCM-verschlüsselt (S2)
-  totpSecret   String?    @map("totp_secret")
-  totpEnabled  Boolean    @default(false) @map("totp_enabled")
+  totpSecret         String?    @map("totp_secret")
+  totpEnabled        Boolean    @default(false) @map("totp_enabled")
   /// Zuletzt verwendeter TOTP-Zeitschritt, damit ein Code nur einmal gilt (S2)
-  totpLastStep Int?       @map("totp_last_step")
+  totpLastStep       Int?       @map("totp_last_step")
   /// Startpasswort aus der Kommandozeile: muss nach der Anmeldung geändert werden
-  mustChangePassword Boolean @default(false) @map("must_change_password")
-  status       UserStatus @default(invited)
-  failedLogins Int        @default(0) @map("failed_logins")
-  lockedUntil  DateTime?  @map("locked_until")
-  lastLoginAt  DateTime?  @map("last_login_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
+  status             UserStatus @default(invited)
+  failedLogins       Int        @default(0) @map("failed_logins")
+  lockedUntil        DateTime?  @map("locked_until")
+  lastLoginAt        DateTime?  @map("last_login_at")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
-  recoveryCodes  RecoveryCode[]
-  invitations    Invitation[]      @relation("InvitationUser")
-  invitesSent    Invitation[]      @relation("InvitationInviter")
-  passwordResets PasswordReset[]
-  groups         GroupMember[]
-  auditEntries   AuditLog[]
-  spacesCreated  Space[]           @relation("SpaceCreator")
-  pagesCreated   Page[]            @relation("PageCreator")
-  pagesUpdated   Page[]            @relation("PageUpdater")
-  pagesDeleted   Page[]            @relation("PageDeleter")
-  pageVersions   PageVersion[]
-  spaceRoles     SpacePermission[]
-  restrictions   PageRestriction[]
-  attachments    Attachment[]
+  recoveryCodes      RecoveryCode[]
+  invitations        Invitation[]        @relation("InvitationUser")
+  invitesSent        Invitation[]        @relation("InvitationInviter")
+  passwordResets     PasswordReset[]
+  groups             GroupMember[]
+  auditEntries       AuditLog[]
+  spacesCreated      Space[]             @relation("SpaceCreator")
+  pagesCreated       Page[]              @relation("PageCreator")
+  pagesUpdated       Page[]              @relation("PageUpdater")
+  pagesDeleted       Page[]              @relation("PageDeleter")
+  pageVersions       PageVersion[]
+  spaceRoles         SpacePermission[]
+  restrictions       PageRestriction[]
+  attachments        Attachment[]
+  attachmentVersions AttachmentVersion[]
 
   @@map("users")
 }
@@ -284,23 +285,47 @@ model PageRestriction {
 
 /// Datei an einer Seite. Der Inhalt liegt unter storage_key im Anhang-Verzeichnis, nicht in der Datenbank.
 model Attachment {
-  id           String   @id @default(uuid()) @db.Uuid
-  pageId       String   @map("page_id") @db.Uuid
+  id           String              @id @default(uuid()) @db.Uuid
+  pageId       String              @map("page_id") @db.Uuid
   /// Bereinigter Original-Dateiname, nur für die Anzeige und den Download
   filename     String
   /// Am Inhalt erkannter Typ (S7); unbekannte Typen sind application/octet-stream
-  mimeType     String   @map("mime_type")
-  sizeBytes    Int      @map("size_bytes")
+  mimeType     String              @map("mime_type")
+  sizeBytes    Int                 @map("size_bytes")
   /// Zufälliger Name im Anhang-Verzeichnis
-  storageKey   String   @unique @map("storage_key")
+  storageKey   String              @unique @map("storage_key")
   sha256       String
-  uploadedById String?  @map("uploaded_by") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at")
-  page         Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  uploadedById String?             @map("uploaded_by") @db.Uuid
+  createdAt    DateTime            @default(now()) @map("created_at")
+  /// Nummer der aktuellen Fassung; Dateifelder oben gehören immer zur aktuellen Fassung
+  version      Int                 @default(1)
+  updatedAt    DateTime            @default(now()) @map("updated_at")
+  /// Schlüssel der laufenden Bearbeitung im Office-Editor (document.key); neu nach jedem abgeschlossenen Speichern
+  officeKey    String?             @unique @map("office_key")
+  page         Page                @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  uploadedBy   User?               @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  versions     AttachmentVersion[]
 
   @@index([pageId])
   @@map("attachments")
+}
+
+/// Alle Fassungen eines Anhangs einschließlich der aktuellen; ältere bleiben zum Herunterladen erhalten
+model AttachmentVersion {
+  id           String     @id @default(uuid()) @db.Uuid
+  attachmentId String     @map("attachment_id") @db.Uuid
+  version      Int
+  mimeType     String     @map("mime_type")
+  sizeBytes    Int        @map("size_bytes")
+  storageKey   String     @unique @map("storage_key")
+  sha256       String
+  createdById  String?    @map("created_by") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  createdBy    User?      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([attachmentId, version])
+  @@map("attachment_versions")
 }
 
 /// Einstellungen, die Administratoren in der Oberfläche ändern (M4: SMTP unter dem Schlüssel "mail").

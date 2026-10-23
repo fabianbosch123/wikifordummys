@@ -26,6 +26,8 @@ import { RateLimitService } from './infra/rate-limit.service';
 import { createRedis, REDIS } from './infra/redis';
 import { MailService } from './mail/mail.service';
 import { MeController } from './me/me.controller';
+import { OfficeController } from './office/office.controller';
+import { OfficeService } from './office/office.service';
 import { PagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
 import { RestrictionsService } from './pages/restrictions.service';
@@ -48,6 +50,7 @@ export class AppModule implements NestModule {
         SpacesController,
         PagesController,
         AttachmentsController,
+        OfficeController,
         SearchController,
         DirectoryController,
         SettingsController,
@@ -81,6 +84,7 @@ export class AppModule implements NestModule {
         RestrictionsService,
         AttachmentStorageService,
         AttachmentsService,
+        OfficeService,
         SearchService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

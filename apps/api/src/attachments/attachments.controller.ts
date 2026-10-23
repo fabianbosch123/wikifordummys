@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
@@ -39,6 +39,24 @@ export class AttachmentsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { file, etag } = await this.attachments.download(ctx.user, id, q.download === '1');
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('ETag', etag);
+    return file;
+  }
+
+  @Get('attachments/:id/versions')
+  versions(@Param('id', uuid) id: string, @Auth() ctx: AuthContext) {
+    return this.attachments.versions(ctx.user, id);
+  }
+
+  @Get('attachments/:id/versions/:version')
+  async downloadVersion(
+    @Param('id', uuid) id: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Auth() ctx: AuthContext,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { file, etag } = await this.attachments.downloadVersion(ctx.user, id, version);
     res.setHeader('Cache-Control', 'private, no-cache');
     res.setHeader('ETag', etag);
     return file;

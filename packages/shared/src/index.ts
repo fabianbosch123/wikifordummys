@@ -243,8 +243,31 @@ export interface AttachmentDto {
   preview: 'image' | 'pdf' | null;
   uploadedBy: UserRefDto | null;
   createdAt: string;
+  /** Nummer der aktuellen Fassung (1 = so hochgeladen, danach eine je Speichern im Office-Editor) */
+  version: number;
+  updatedAt: string;
   /** Adresse zum Abrufen, z. B. für Bilder in Seiten */
   url: string;
+  /** Office-Editor: edit = bearbeiten, view = nur ansehen, null = kein Office-Dokument oder Editor nicht eingerichtet */
+  office: 'edit' | 'view' | null;
+}
+
+export interface AttachmentVersionDto {
+  version: number;
+  sizeBytes: number;
+  createdBy: UserRefDto | null;
+  createdAt: string;
+  /** Adresse zum Herunterladen dieser Fassung */
+  url: string;
+}
+
+/** Alles, was die Weboberfläche zum Öffnen des Office-Editors braucht */
+export interface OfficeEditorDto {
+  /** Skript des Editors (api.js), liegt unter /office/ auf derselben Domain */
+  scriptUrl: string;
+  /** Konfiguration für new DocsAPI.DocEditor(), mit JWT signiert (Feld token) */
+  config: Record<string, unknown>;
+  attachment: AttachmentDto;
 }
 
 export interface SearchHitDto {

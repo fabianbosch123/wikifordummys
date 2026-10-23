@@ -328,7 +328,7 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
     const cutoff = new Date(now.getTime() - TRASH_RETENTION_DAYS * DAY_MS);
     const expired = { deletedAt: { lt: cutoff } };
     // Dateien merken, bevor die Zeilen verschwinden; die Dateien erst nach der Datenbank löschen
-    const files = await this.prisma.attachment.findMany({ where: { page: expired }, select: { storageKey: true } });
+    const files = await this.prisma.attachmentVersion.findMany({ where: { attachment: { page: expired } }, select: { storageKey: true } });
     // Unterseiten, Versionen, Einschränkungen und Anhänge werden per Fremdschlüssel mitgelöscht
     const { count } = await this.prisma.page.deleteMany({ where: expired });
     await this.storage.remove(files.map((f) => f.storageKey));

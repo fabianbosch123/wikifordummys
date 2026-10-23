@@ -6,6 +6,7 @@ import { AuditService } from './audit/audit.service';
 import { AuthService } from './auth/auth.service';
 import { loadConfig } from './config';
 import { MailService } from './mail/mail.service';
+import { OfficeService } from './office/office.service';
 import { PrismaService } from './infra/prisma.service';
 
 const USAGE = `Verwendung:
@@ -22,7 +23,11 @@ const USAGE = `Verwendung:
 
   node dist/cli.js mail-test [--to <adresse>] [--verify-only]
       Prüft den Mailversand mit den gültigen Einstellungen (Administration vor .env)
-      und schickt eine Testmail. Ohne --to wird nur die Verbindung geprüft.`;
+      und schickt eine Testmail. Ohne --to wird nur die Verbindung geprüft.
+
+  node dist/cli.js office-check
+      Prüft den Office-Editor von Ende zu Ende: Erreichbarkeit, JWT-Geheimnis und
+      Dateiaustausch zwischen API und Editor-Server im internen Netz.`;
 
 function arg(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -118,8 +123,21 @@ export async function mailTest(to: string | undefined): Promise<string> {
   }
 }
 
+export async function officeCheck(): Promise<string> {
+  const ctx = await NestFactory.createApplicationContext(AppModule.forRoot(loadConfig()), { logger: ['error'] });
+  try {
+    return await ctx.get(OfficeService).selfCheck();
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
+  if (command === 'office-check') {
+    console.log(await officeCheck());
+    return;
+  }
   if (command === 'mail-test') {
     console.log(await mailTest(args.includes('--verify-only') ? undefined : arg(args, 'to')));
     return;

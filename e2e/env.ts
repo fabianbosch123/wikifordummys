@@ -10,6 +10,11 @@ export const e2eEnv: Record<string, string> = {
   COOKIE_SECURE: 'false',
   TRUST_PROXY: '1',
   ATTACHMENTS_DIR: process.env.E2E_ATTACHMENTS_DIR ?? `${process.env.TMPDIR ?? '/tmp'}/wiki-e2e-attachments`,
+  // Office-Editor: tests/office.spec.ts ersetzt Editor-Skript und Editor-Server durch Attrappen
+  OFFICE_ENABLED: 'true',
+  OFFICE_JWT_SECRET: 'e2e-office-secret-e2e-office-secret-1234',
+  OFFICE_INTERNAL_URL: 'http://localhost:3990',
+  OFFICE_API_URL: 'http://localhost:3001',
   // Muss zur Adresse passen, mit der die Weboberfläche gebaut wurde (Standard)
   API_INTERNAL_URL: 'http://localhost:3001',
 };
