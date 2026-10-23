@@ -1,0 +1,7 @@
+# Betriebsart "internal": Server nur im eigenen Netz, ohne Zugang aus dem Internet.
+# Caddy stellt das Zertifikat mit einer eigenen Zertifizierungsstelle aus. Damit Browser nicht warnen,
+# das Stammzertifikat einmal auf den Geräten importieren (wikictl ca-cert gibt es aus).
+{$WIKI_DOMAIN} {
+	tls internal
+	import common.caddy
+}

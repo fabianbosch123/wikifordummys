@@ -1,0 +1,13 @@
+# Betriebsart "proxy": ein vorhandener Reverse Proxy (z. B. nginx, Traefik, Firewall) übernimmt TLS
+# und leitet https://WIKI_DOMAIN per HTTP an diesen Caddy weiter (Port WIKI_HTTP_PORT).
+# Caddy übernimmt X-Forwarded-For nur von den Adressen in WIKI_TRUSTED_PROXIES, damit Rate-Limits und
+# Audit-Log die echte IP der Benutzer sehen und niemand eine fremde IP vortäuschen kann.
+{
+	servers {
+		trusted_proxies static {$WIKI_TRUSTED_PROXIES:private_ranges}
+	}
+}
+
+http://{$WIKI_DOMAIN} {
+	import common.caddy
+}

@@ -1,0 +1,6 @@
+# Betriebsart "letsencrypt": öffentlich erreichbarer Server (VPS oder eigener Server mit Portfreigabe 80 und 443).
+# Caddy holt das Zertifikat für WIKI_DOMAIN automatisch bei Let's Encrypt und erneuert es selbst.
+# Voraussetzung: der DNS-Eintrag der Domain zeigt auf den Server, Ports 80 und 443 sind aus dem Internet erreichbar.
+{$WIKI_DOMAIN} {
+	import common.caddy
+}

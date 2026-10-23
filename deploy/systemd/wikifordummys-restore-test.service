@@ -1,0 +1,11 @@
+[Unit]
+Description=wikifordummys: Test-Wiederherstellung der letzten Sicherung
+After=docker.service network-online.target wikifordummys-backup.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wikictl restore-test
+Nice=10
+IOSchedulingClass=idle

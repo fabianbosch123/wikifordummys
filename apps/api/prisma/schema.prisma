@@ -1,6 +1,7 @@
 // Datenmodell Meilenstein 1: Benutzer, Gruppen, Einladungen, 2FA, Audit-Log.
 // Meilenstein 2: Spaces, Seitenbaum, Seitenversionen.
 // Meilenstein 3: Space-Rollen, Seiteneinschränkungen, Anhänge, Volltextsuche.
+// Meilenstein 4: Einstellungen aus der Administration (SMTP).
 
 generator client {
   provider      = "prisma-client-js"
@@ -298,4 +299,15 @@ model Attachment {
 
   @@index([pageId])
   @@map("attachments")
+}
+
+/// Einstellungen, die Administratoren in der Oberfläche ändern (M4: SMTP unter dem Schlüssel "mail").
+/// Sie haben Vorrang vor den Werten aus .env; Passwörter liegen AES-256-GCM-verschlüsselt im JSON.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }
