@@ -68,6 +68,31 @@ describe('Inhaltsprüfung (S6)', () => {
     expect(() => sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: '' }] }))).toThrow(ContentError);
   });
 
+  it('übernimmt gezogene Bildgrößen gerundet und verwirft ungültige', () => {
+    const image = (attrs: Record<string, unknown>) =>
+      sanitizeDoc(doc({ type: 'image', attrs: { src: '/api/v1/attachments/1', ...attrs } })).content?.[0].attrs;
+    expect(image({ width: 320.4, height: 180.6 })).toEqual({ src: '/api/v1/attachments/1', width: 320, height: 181 });
+    expect(image({ width: '100%', height: 'calc(1px)' })).toEqual({ src: '/api/v1/attachments/1' });
+    expect(image({ width: 5, height: 99_999 })).toEqual({ src: '/api/v1/attachments/1' });
+    expect(image({ width: Number.NaN, height: null })).toEqual({ src: '/api/v1/attachments/1' });
+    expect(image({ width: 200, style: 'width: 9999px' })).toEqual({ src: '/api/v1/attachments/1', width: 200 });
+  });
+
+  it('übernimmt gezogene Spaltenbreiten und verwirft ungültige', () => {
+    const cell = (attrs: Record<string, unknown>) =>
+      sanitizeDoc(doc({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs, content: [p('A')] }] }] }))
+        .content?.[0].content?.[0].content?.[0].attrs;
+    expect(cell({ colspan: 1, colwidth: [150.6] })).toEqual({ colspan: 1, rowspan: 1, colwidth: [151] });
+    // Zusammengeführte Zellen: je Spalte ein Wert, 0 = Breite nicht gesetzt, zu schmale Spalten werden angehoben
+    expect(cell({ colspan: 3, colwidth: [200, 0, 10] })).toEqual({ colspan: 3, rowspan: 1, colwidth: [200, 0, 40] });
+    expect(cell({ colspan: 2, colwidth: [200] })).toEqual({ colspan: 2, rowspan: 1 });
+    expect(cell({ colwidth: [0] })).toEqual({ colspan: 1, rowspan: 1 });
+    expect(cell({ colwidth: ['100px'] })).toEqual({ colspan: 1, rowspan: 1 });
+    expect(cell({ colwidth: [-5] })).toEqual({ colspan: 1, rowspan: 1 });
+    expect(cell({ colwidth: [99_999] })).toEqual({ colspan: 1, rowspan: 1 });
+    expect(cell({ colwidth: 'x' })).toEqual({ colspan: 1, rowspan: 1 });
+  });
+
   it('ergänzt einen leeren Absatz für leere Dokumente', () => {
     expect(sanitizeDoc({ type: 'doc' })).toEqual({ type: 'doc', content: [{ type: 'paragraph' }] });
   });
