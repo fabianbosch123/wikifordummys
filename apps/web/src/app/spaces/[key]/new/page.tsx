@@ -3,9 +3,10 @@
 import { EMPTY_DOC, type PageDto } from '@wiki/shared';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { resolveUploads, uploadPending } from '@/components/editor/uploads';
 import { PageForm } from '@/components/PageForm';
 import { SpaceLayout } from '@/components/SpaceLayout';
-import { api } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 
 function NewPage() {
@@ -28,11 +29,21 @@ function NewPage() {
               tree={tree}
               submitLabel="Seite anlegen"
               onCancel={() => router.push(parent ? `/pages/${parent.id}` : `/spaces/${space.key}`)}
-              onSubmit={async (title, content) => {
+              onSubmit={async (title, content, _force, files) => {
+                // Anhänge brauchen eine Seite: erst ohne die eingefügten Dateien anlegen, dann hochladen und einsetzen
                 const page = await api<PageDto>('/pages', {
                   method: 'POST',
-                  body: { spaceKey: space.key, parentId: parent?.id, title, content },
+                  body: { spaceKey: space.key, parentId: parent?.id, title, content: files.size ? resolveUploads(content, new Map()) : content },
                 });
+                if (files.size) {
+                  try {
+                    const result = await uploadPending(page.id, content, files);
+                    await api(`/pages/${page.id}`, { method: 'PUT', body: { title, content: result.content, version: page.version } });
+                    if (result.failed.length) window.alert(`Die Seite ist angelegt, aber nicht alle Dateien wurden eingefügt:\n${result.failed.join('\n')}`);
+                  } catch (err) {
+                    window.alert(`Die Seite ist angelegt, aber die Dateien wurden nicht eingefügt: ${errorMessage(err)}`);
+                  }
+                }
                 router.push(`/pages/${page.id}`);
               }}
             />
