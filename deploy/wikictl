@@ -15,7 +15,7 @@ Verwendung: sudo wikictl <befehl> [optionen]
 
 Betrieb
   status                  Zustand der Dienste, Health-Check, Zertifikat, letzte Sicherung
-  logs [dienst]           Logs verfolgen (caddy, web, api, db, redis)
+  logs [dienst]           Logs verfolgen (caddy, web, api, db, redis, office)
   start | stop | restart  Dienste starten, anhalten, neu starten
   update [git-ref]        Sicherung, neuen Stand holen (Standard: aktueller Branch), bauen, neu starten
   reconfigure             Installer erneut ausführen (Domain, SMTP, Sicherung … ändern)
@@ -27,6 +27,9 @@ Benutzer und Mail
   reset-password --email <adresse>                 neues Startpasswort setzen und anzeigen
                           (z. B. wenn der Mailversand nicht funktioniert)
   mail-test [--to <adresse>]                        Mailversand prüfen
+
+Office-Editor (WIKI_OFFICE=true in .env, an- und abschalten mit reconfigure)
+  office-check            Editor-Server, JWT-Geheimnis und Dateiaustausch prüfen
 
 Sicherung (restic, Ziel aus .env)
   backup                  jetzt sichern (Datenbank, Anhänge, Zertifikate, .env), alte Stände ausdünnen
@@ -66,6 +69,14 @@ cmd_status() {
   step "Health-Check"
   compose exec -T api node -e "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>r.text()).then(t=>console.log(t),e=>{console.log('nicht erreichbar: '+e.message);process.exit(1)})" ||
     warn "API antwortet nicht."
+  if [[ $(env_get WIKI_OFFICE) == true ]]; then
+    step "Office-Editor"
+    if compose exec -T office sh -c "printf 'GET /healthcheck HTTP/1.0\r\n\r\n' | nc -w 5 127.0.0.1 80" 2>/dev/null | grep -q true; then
+      ok "Office-Editor bereit."
+    else
+      warn "Office-Editor antwortet nicht (wikictl logs office)."
+    fi
+  fi
   if [[ ${tls:-letsencrypt} != proxy ]]; then
     step "Zertifikat"
     local end
@@ -396,6 +407,7 @@ main() {
     create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
     reset-password) need_env && compose exec -T api node dist/cli.js reset-password "$@" ;;
     mail-test) need_env && compose exec -T api node dist/cli.js mail-test "$@" ;;
+    office-check) need_env && compose exec -T api node dist/cli.js office-check ;;
     backup) cmd_backup ;;
     backup-init) cmd_backup_init ;;
     snapshots) cmd_snapshots ;;

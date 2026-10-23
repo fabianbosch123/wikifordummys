@@ -26,7 +26,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web, api]
-    networks: [frontend]
+    networks: [frontend, office]
     logging: *logging
 
   web:
@@ -58,6 +58,9 @@ services:
       # Proxys vor der API: Caddy = 1, im Proxy-Betrieb zusätzlich der vorhandene Reverse Proxy = 2
       TRUST_PROXY: ${WIKI_TRUST_PROXY_HOPS:-1}
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-50}
+      # Office-Editor (Dienst office, nur mit WIKI_OFFICE=true): gemeinsames Geheimnis für die signierten Nachrichten
+      OFFICE_ENABLED: ${WIKI_OFFICE:-false}
+      OFFICE_JWT_SECRET: ${OFFICE_JWT_SECRET:-}
     volumes:
       - attachments:/var/lib/wiki/attachments
     healthcheck:
@@ -69,8 +72,39 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
-    # frontend für Caddy und ausgehende Mails, backend für Datenbank und Redis
-    networks: [frontend, backend]
+    # frontend für Caddy und ausgehende Mails, backend für Datenbank und Redis, office für den Editor-Server
+    networks: [frontend, backend, office]
+    logging: *logging
+
+  # Office-Editor Euro-Office (AGPL-3.0, Fork von ONLYOFFICE Docs) zum Ansehen und Bearbeiten von Office-Anhängen.
+  # Optional: startet nur mit dem Profil office (WIKI_OFFICE=true in .env; install.sh und wikictl setzen dann das Profil).
+  # Speichert keine Dokumente dauerhaft; die Dateien bleiben im Anhang-Volume der API.
+  office:
+    image: ghcr.io/euro-office/documentserver:${OFFICE_VERSION:-v9.3.6}
+    profiles: [office]
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${OFFICE_JWT_SECRET:-}
+      JWT_HEADER: Authorization
+      JWT_IN_BODY: "true"
+      # Dateien kommen von der API im internen Docker-Netz (private Adresse); das Netz office hat keinen Weg nach draußen
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "false"
+      WOPI_ENABLED: "false"
+      EXAMPLE_ENABLED: "false"
+      PLUGINS_ENABLED: "false"
+      NGINX_CLIENT_MAX_BODY_SIZE: ${ATTACHMENT_MAX_MB:-50}m
+    volumes:
+      - office_data:/var/www/euro-office/Data
+    healthcheck:
+      # Im Image gibt es kein curl, aber netcat
+      test: ["CMD-SHELL", "printf 'GET /healthcheck HTTP/1.0\\r\\n\\r\\n' | nc -w 5 127.0.0.1 80 | grep -q true"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    networks: [office]
     logging: *logging
 
   db:
@@ -110,6 +144,8 @@ networks:
   frontend: {}
   # Kein Zugang nach außen: Datenbank und Redis sind nur für die API erreichbar
   backend: { internal: true }
+  # Editor-Server: erreichbar nur für Caddy und API, selbst ohne Zugang ins Internet
+  office: { internal: true }
 
 volumes:
   caddy_data: {}
@@ -117,3 +153,4 @@ volumes:
   pgdata: {}
   redisdata: {}
   attachments: {}
+  office_data: {}

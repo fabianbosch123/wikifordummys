@@ -7,7 +7,7 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Aufgabe | Befehl | Automatisch |
 | --- | --- | --- |
 | Zustand ansehen | `sudo wikictl status` | |
-| Logs | `sudo wikictl logs [caddy\|web\|api\|db\|redis]` | |
+| Logs | `sudo wikictl logs [caddy\|web\|api\|db\|redis\|office]` | |
 | Update | `sudo wikictl update [git-ref]` | |
 | Sicherung | `sudo wikictl backup` | täglich ca. 3:15 Uhr (`wikifordummys-backup.timer`) |
 | Test-Wiederherstellung | `sudo wikictl restore-test` | am 1. jedes Monats (`wikifordummys-restore-test.timer`) |
@@ -17,8 +17,22 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | zeigt ein Startpasswort an; `--invite` für Einladungslink per Mail |
 | Passwort zurücksetzen ohne Mail | `sudo wikictl reset-password --email …` | neues Startpasswort, alle Sitzungen enden, 2FA bleibt |
 | Einstellungen ändern | `sudo wikictl reconfigure` (startet den Installer) | |
+| Office-Editor prüfen | `sudo wikictl office-check` | |
 
 Timer ansehen: `systemctl list-timers 'wikifordummys-*'`, letzte Läufe: `journalctl -u wikifordummys-backup.service`.
+
+## Office-Editor
+
+Der optionale Office-Editor ist [Euro-Office](https://github.com/euro-office) (AGPL-3.0, europäischer Fork von ONLYOFFICE Docs). Er öffnet DOCX, XLSX, PPTX, ODT, ODS und ODP zum Ansehen und gemeinsamen Bearbeiten; DOC, XLS und PPT nur zum Ansehen. Der Installer fragt, ob er laufen soll (`WIKI_OFFICE=true` in `.env`); an- und abschalten mit `sudo wikictl reconfigure`.
+
+- **Ressourcen:** etwa 2 CPU-Kerne und 4 GB Arbeitsspeicher zusätzlich, Server mit 8 GB empfohlen. Der erste Start dauert einige Minuten.
+- **Aufbau:** Dienst `office` (Image `ghcr.io/euro-office/documentserver`, Version über `OFFICE_VERSION`), erreichbar unter `https://<domain>/office/`. Er hängt nur im internen Docker-Netz `office` zusammen mit Caddy und API und hat keinen Zugang ins Internet.
+- **Ablauf:** Die API gibt dem Browser eine mit `OFFICE_JWT_SECRET` signierte Konfiguration. Der Editor-Server holt die Datei über einen kurzlebigen Link direkt bei der API. Beim Speichern (Speichern-Knopf oder wenn alle den Editor schließen) ruft er die API mit einem signierten JWT zurück; die API holt die neue Datei ab und legt sie als **neue Fassung** des Anhangs an. Ältere Fassungen bleiben herunterladbar.
+- **Rechte:** Ansehen mit Leserecht auf der Seite, Bearbeiten nur mit Bearbeiten-Recht. Bearbeiten öffnen und jedes Speichern stehen im Audit-Log (`attachment.office_opened`, `attachment.version_saved`).
+- **Gesperrt von außen:** die Beispiel-App, Info- und Verwaltungsseiten des Editor-Servers sowie die Pfade `/api/v1/office/files/…` und `/api/v1/office/callback`, die nur der Editor-Server im internen Netz nutzt.
+- **Daten:** Der Editor-Server speichert keine Dokumente dauerhaft; die Dateien liegen im Anhang-Volume und sind damit in der Sicherung enthalten. Ein Neustart des Dienstes während einer Bearbeitung verwirft nicht gespeicherte Änderungen.
+- **Prüfen:** `sudo wikictl office-check` lässt den Editor-Server eine Datei bei der API holen und umwandeln und holt das Ergebnis zurück. Fehler −8 bedeutet ein abweichendes JWT-Geheimnis, −4, dass der Editor-Server die API nicht erreicht.
+- **Hinter einem vorhandenen Proxy** muss dieser WebSockets weiterreichen (Beispiele in [installation.md](installation.md)).
 
 ## Updates
 

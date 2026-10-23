@@ -98,11 +98,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
         proxy_request_buffering off;
+        # Nur für den Office-Editor nötig: WebSocket für die gemeinsame Bearbeitung
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
     }
 }
+
+# einmal im http-Block:
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 ```
 
-Apache (Module `proxy`, `proxy_http`, `headers`):
+Apache (Module `proxy`, `proxy_http`, `headers`; für den Office-Editor zusätzlich `proxy_wstunnel` und `rewrite`):
 
 ```apache
 <VirtualHost *:443>
@@ -113,6 +120,10 @@ Apache (Module `proxy`, `proxy_http`, `headers`):
     ProxyPassReverse / http://127.0.0.1:8080/
     RequestHeader set X-Forwarded-Proto https
     LimitRequestBody 52428800
+    # Office-Editor: WebSocket weiterreichen
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/(.*) ws://127.0.0.1:8080/$1 [P,L]
 </VirtualHost>
 ```
 
@@ -165,6 +176,7 @@ Den Zugang können Administratoren später auch in der Weboberfläche unter **Ad
 | `SMTP_HOST`, `SMTP_SECURITY`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Server; **`tls`**, `starttls`, `none`; Port passend zur Verschlüsselung |
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Absender; **`Wiki`** |
 | `ADMIN_CREATE`, `ADMIN_EMAIL`, `ADMIN_NAME` | **`j`** bei Neuinstallation |
+| `OFFICE_ENABLE` | **`j`** (bei weniger als 7 GB Arbeitsspeicher **`n`**), `n`; siehe [Office-Editor](betrieb.md#office-editor) |
 | `BACKUP_ENABLE`, `BACKUP_KIND`, `BACKUP_REPOSITORY` | **`j`**; **`local`**, `sftp`, `s3`, `rest`, `other`; Ziel |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_PING_URL` | nur bei S3; optional |
 | `MONITOR_PING_URL` | optional |

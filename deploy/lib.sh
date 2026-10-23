@@ -58,8 +58,11 @@ env_set() {
   mv "$tmp" "$file"
 }
 
+# Docker Compose mit der Konfiguration aus .env; der Office-Editor (Profil office) läuft nur mit WIKI_OFFICE=true
 compose() {
-  docker compose --project-directory "$WIKI_DIR" -f "$WIKI_DIR/docker-compose.yml" --env-file "$ENV_FILE" "$@"
+  local profile=()
+  if [[ $(env_get WIKI_OFFICE) == true ]]; then profile=(--profile office); fi
+  docker compose --project-directory "$WIKI_DIR" -f "$WIKI_DIR/docker-compose.yml" --env-file "$ENV_FILE" "${profile[@]}" "$@"
 }
 
 # Prozentkodierung für Benutzername und Passwort in SMTP_URL
