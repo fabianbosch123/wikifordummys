@@ -141,6 +141,27 @@ office_set() {
 mem_gb() { awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo 2>/dev/null || echo 0; }
 office_mem_ok() { (($(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0) >= 7000000)); }
 
+# Freier Platz in MB dort, wo Docker Images, Build-Cache und Volumes ablegt (Datenbank, Anhänge)
+docker_free_mb() {
+  local root free
+  root=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || true)
+  [[ -d ${root:-/var/lib/docker} ]] || root=/
+  free=$(df -Pm "${root:-/var/lib/docker}" 2>/dev/null | awk 'NR == 2 {print $4}')
+  printf '%s' "${free:-0}"
+}
+
+# Räumt auf, was Docker bei jedem Update anhäuft: Build-Cache und abgelöste Image-Stände.
+# Volumes (Datenbank, Anhänge, Zertifikate) bleiben unberührt. Mit "all" auch der frische Build-Cache
+# (das nächste Update baut dann länger), sonst bleibt der Cache der letzten 24 Stunden erhalten.
+docker_cleanup() {
+  if [[ ${1:-} == all ]]; then
+    docker builder prune -af >/dev/null 2>&1 || true
+  else
+    docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
+  fi
+  docker image prune -f >/dev/null 2>&1 || true
+}
+
 # Ruft eine Push-Adresse der Überwachung auf (Fehler werden ignoriert)
 ping_url() {
   [[ -n $1 ]] || return 0

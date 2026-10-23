@@ -19,6 +19,8 @@ Betrieb
   start | stop | restart  Dienste starten, anhalten, neu starten
   update [git-ref]        Sicherung, neuen Stand holen (Standard: aktueller Branch), bauen, neu starten
   reconfigure             Installer erneut ausführen (Domain, SMTP, Sicherung … ändern)
+  cleanup                 Platz schaffen: Docker-Build-Cache, unbenutzte Images, Systemjournal
+                          (Datenbank, Anhänge und Sicherungen bleiben unberührt)
 
 Benutzer und Mail
   create-admin --email <adresse> --name "<name>" [--invite]
@@ -97,6 +99,7 @@ cmd_status() {
   fi
   step "Speicherplatz"
   df -h / "$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)" | awk '!seen[$0]++'
+  if (($(docker_free_mb) < 3000)); then warn "Weniger als 3 GB frei. Platz schaffen mit: sudo wikictl cleanup"; fi
   step "Sicherung"
   if restic_env; then
     restic snapshots --latest 1 --compact 2>/dev/null || warn "Sicherungsziel nicht erreichbar."
@@ -116,6 +119,7 @@ cmd_update() {
   need_root
   need_env
   local ref=${1:-}
+  check_space_for_update
   step "Sicherung vor dem Update"
   if restic_env; then
     cmd_backup
@@ -126,6 +130,9 @@ cmd_update() {
     compose exec -T db pg_dump -U wiki wiki | gzip >"$file"
     chmod 600 "$file"
     ok "Datenbank gesichert nach $file (Anhänge nicht; besser restic einrichten)."
+    # Nur die letzten fünf Sicherungen vor Updates behalten, sonst füllt jedes Update die Platte weiter
+    find /var/backups/wikifordummys -maxdepth 1 -name 'vor-update-*.sql.gz' -printf '%T@ %p\n' |
+      sort -rn | tail -n +6 | cut -d' ' -f2- | xargs -r -d '\n' rm -f --
   fi
   step "Neuen Stand holen"
   local before
@@ -162,11 +169,50 @@ cmd_update_apply() {
     compose logs --tail 40 api
     die "Die API ist nach dem Update nicht gesund. Zurück zum alten Stand: sudo wikictl update $before (Datenbank ggf. mit wikictl restore)."
   fi
-  docker image prune -f >/dev/null || true
+  # Jeder Bau hinterlässt Build-Cache und alte Image-Stände; ohne Aufräumen läuft die Platte mit der Zeit voll
+  docker_cleanup
   if systemctl is-active --quiet fail2ban 2>/dev/null; then
     # Neue Container schreiben in neue Logdateien; fail2ban liest die Dateiliste nur beim Laden
     fail2ban-client reload wikifordummys >/dev/null 2>&1 || true
   fi
+}
+
+# Bauen und Image-Download brauchen mehrere GB. Läuft die Platte dabei voll, startet die Datenbank
+# nicht mehr ("No space left on device"). Deshalb vorher prüfen, erst aufräumen, notfalls abbrechen.
+check_space_for_update() {
+  local need=4000 free
+  if [[ $(env_get WIKI_OFFICE) == true ]]; then need=6000; fi
+  free=$(docker_free_mb)
+  ((free >= need)) && return 0
+  step "Speicherplatz"
+  info "Nur $((free / 1024)) GB frei; räume Docker-Build-Cache und alte Images auf …"
+  docker_cleanup all
+  free=$(docker_free_mb)
+  if ((free < need)); then
+    die "Nur $((free / 1024)) GB frei, das Update braucht etwa $((need / 1000)) GB. Platz schaffen (sudo wikictl cleanup; Übersicht mit df -h und sudo du -sh /var/lib/docker/* /var/log /var/backups) und erneut starten."
+  fi
+  ok "$((free / 1024)) GB frei."
+}
+
+cmd_cleanup() {
+  need_root
+  need_env
+  local before after
+  before=$(docker_free_mb)
+  step "Docker aufräumen (Build-Cache, unbenutzte Images; Volumes bleiben)"
+  docker_cleanup all
+  # Entfernt Images, die kein Container mehr nutzt (z. B. der abgeschaltete Office-Editor); laufende Dienste behalten ihre
+  docker image prune -af >/dev/null 2>&1 || true
+  step "Systemjournal auf 200 MB begrenzen, Paket-Cache leeren"
+  journalctl --vacuum-size=200M >/dev/null 2>&1 || true
+  apt-get clean >/dev/null 2>&1 || true
+  after=$(docker_free_mb)
+  ok "Frei: $((before / 1024)) GB → $((after / 1024)) GB"
+  if [[ -d /var/backups/wikifordummys ]]; then
+    info "Datenbank-Sicherungen vor Updates: $(du -sh /var/backups/wikifordummys | cut -f1) in /var/backups/wikifordummys (ältere lassen sich löschen)."
+  fi
+  # Bei voller Platte hängen Datenbank und API in der Neustart-Schleife; jetzt wieder starten
+  compose up -d >/dev/null 2>&1 || true
 }
 
 # Neu seit dem Update: Office-Editor anbieten (nur einmal; die Antwort landet in .env)
@@ -458,6 +504,10 @@ cmd_monitor() {
   local url state
   url=$(env_get MONITOR_PING_URL)
   state=$(compose exec -T api node -e "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>r.json()).then(b=>console.log(b.status+' '+JSON.stringify(b.checks)),()=>console.log('fehler'))" 2>/dev/null || echo fehler)
+  # Volle Platte früh melden: unter 1 GB frei steht die Datenbank kurz vor dem Stillstand
+  local free
+  free=$(docker_free_mb)
+  if [[ $state == ok* ]] && ((free < 1000)); then state="platte-voll (${free} MB frei; sudo wikictl cleanup)"; fi
   if [[ $state == ok* ]]; then
     if [[ $state == *knapp* ]]; then warn "Speicherplatz wird knapp: $state"; fi
     ping_url "$url"
@@ -486,6 +536,7 @@ main() {
     update) cmd_update "$@" ;;
     update-apply) cmd_update_apply "$@" ;;
     office) cmd_office "$@" ;;
+    cleanup) cmd_cleanup ;;
     reconfigure) exec "$WIKI_DIR/install.sh" "$@" ;;
     create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
     reset-password) need_env && compose exec -T api node dist/cli.js reset-password "$@" ;;
