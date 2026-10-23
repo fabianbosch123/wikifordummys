@@ -30,7 +30,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Si
 
 ## Funktionen in Meilenstein 1
 
-- **Konten nur per Einladung.** Keine offene Registrierung. Der Einladungslink ist 72 Stunden gültig.
+- **Konten nur per Einladung.** Keine offene Registrierung. Der Einladungslink ist 72 Stunden gültig. Der erste Administrator bekommt stattdessen ein Startpasswort in der Shell, damit die Anmeldung auch ohne Mailversand klappt; es muss nach der ersten Anmeldung geändert werden.
 - **Erster Administrator per Kommandozeile**, ohne Standard-Passwort.
 - **Pflicht-2FA für alle (TOTP).** Vor der Einrichtung gibt es keinen Zugriff auf Inhalte. Dazu 10 Wiederherstellungscodes, jeder einmal nutzbar.
 - **Passwort vergessen** per Mail-Link (60 Minuten gültig). Die 2FA bleibt dabei bestehen.
@@ -58,7 +58,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Si
 
 ## Funktionen in Meilenstein 4
 
-- **Installer `install.sh`** für Ubuntu: fragt Domain, Betriebsart, SMTP-Zugang, ersten Administrator, Sicherungsziel und Überwachung ab, erzeugt `.env` mit zufälligen Schlüsseln, installiert bei Bedarf Docker, baut und startet das Wiki, prüft API, Zertifikat und Mailversand (mit Testmail) und gibt den Einladungslink aus. Erneut aufgerufen ändert er die Konfiguration, ohne Schlüssel zu ersetzen; mit `--non-interactive` läuft er ohne Rückfragen.
+- **Installer `install.sh`** für Ubuntu: fragt Domain, Betriebsart, SMTP-Zugang, ersten Administrator, Sicherungsziel und Überwachung ab, erzeugt `.env` mit zufälligen Schlüsseln, installiert bei Bedarf Docker, baut und startet das Wiki, prüft API, Zertifikat und Mailversand (mit Testmail) und zeigt die Zugangsdaten des ersten Administrators (Startpasswort) an. Erneut aufgerufen ändert er die Konfiguration, ohne Schlüssel zu ersetzen; mit `--non-interactive` läuft er ohne Rückfragen.
 - **Drei Betriebsarten** für VPS und eigenen Server: öffentlich mit Let's Encrypt, nur im eigenen Netz mit eigener Zertifizierungsstelle, oder hinter einem vorhandenen Reverse Proxy (nginx, Apache, Traefik), der HTTPS übernimmt. Echte Client-IPs bleiben dabei erhalten.
 - **Mailversand in der Administration** (**Administration → E-Mail**): SMTP-Server, Verschlüsselung, Zugang und Absender ändern, Verbindung vor dem Speichern prüfen, Testmail senden. Hat Vorrang vor `.env`; das Passwort liegt verschlüsselt in der Datenbank. Änderungen und Testmails stehen im Audit-Log.
 - **`wikictl`** für den Betrieb: Status, Logs, Update mit vorheriger Sicherung, Sicherung, Wiederherstellung (auch auf einem neuen Server), Test-Wiederherstellung, Mailtest, Stammzertifikat ausgeben.

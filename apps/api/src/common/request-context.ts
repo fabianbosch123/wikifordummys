@@ -9,6 +9,7 @@ export interface AuthUser {
   isAdmin: boolean;
   canCreateSpace: boolean;
   totpEnabled: boolean;
+  mustChangePassword: boolean;
   /** Alle Gruppen des Benutzers einschließlich der impliziten Gruppe alle-benutzer */
   groupIds: string[];
 }

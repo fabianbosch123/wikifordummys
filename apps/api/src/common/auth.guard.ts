@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { SessionStage } from '@wiki/shared';
-import { ADMIN_KEY, PUBLIC_KEY, STAGES_KEY } from './decorators';
+import { ADMIN_KEY, PASSWORD_CHANGE_KEY, PUBLIC_KEY, STAGES_KEY } from './decorators';
 import { Errors } from './errors';
 import type { WikiRequest } from './request-context';
 
@@ -25,6 +25,15 @@ export class AuthGuard implements CanActivate {
       // Unvollständige Anmeldung: wie nicht angemeldet behandeln, aber Stufe mitteilen
       if (req.auth.session.stage !== 'full') throw Errors.stageRequired(req.auth.session.stage);
       throw Errors.forbidden();
+    }
+
+    // Startpasswort aus der Kommandozeile: nach vollständiger Anmeldung bis zur Änderung nur Profil, Passwort und Abmelden
+    if (
+      req.auth.session.stage === 'full' &&
+      req.auth.user.mustChangePassword &&
+      !this.reflector.getAllAndOverride<boolean>(PASSWORD_CHANGE_KEY, targets)
+    ) {
+      throw Errors.passwordChangeRequired();
     }
 
     if (this.reflector.getAllAndOverride<boolean>(ADMIN_KEY, targets) && !req.auth.user.isAdmin) {

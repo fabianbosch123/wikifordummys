@@ -5,7 +5,7 @@ import { IsString, Length, Matches, MaxLength } from 'class-validator';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
-import { Auth } from '../common/decorators';
+import { AllowPendingPasswordChange, Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
 import { AuthContext, clientIp, meDto, userAgent, WikiRequest } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
@@ -41,6 +41,7 @@ export class MeController {
     private readonly audit: AuditService,
   ) {}
 
+  @AllowPendingPasswordChange()
   @Get()
   me(@Auth() ctx: AuthContext): MeDto {
     return meDto(ctx.user);
@@ -52,6 +53,7 @@ export class MeController {
     return { ...meDto(ctx.user), displayName: dto.displayName };
   }
 
+  @AllowPendingPasswordChange()
   @Post('password')
   @HttpCode(204)
   async changePassword(@Body() dto: ChangePasswordDto, @Auth() ctx: AuthContext, @Req() req: WikiRequest) {

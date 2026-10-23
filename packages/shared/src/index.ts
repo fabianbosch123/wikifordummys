@@ -36,6 +36,8 @@ export interface MeDto {
   /** Darf eigene Spaces anlegen (globales Recht create_space) */
   canCreateSpace: boolean;
   totpEnabled: boolean;
+  /** Startpasswort aus der Kommandozeile: vor allem anderen ändern */
+  mustChangePassword: boolean;
 }
 
 export interface SessionStateDto {

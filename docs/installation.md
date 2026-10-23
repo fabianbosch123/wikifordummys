@@ -30,7 +30,7 @@ Der Installer fragt nacheinander:
 | **Domain** | Adresse des Wikis; bei Let's Encrypt prüft der Installer, ob der DNS-Eintrag auf den Server zeigt |
 | **Proxy** (nur Betriebsart „Proxy“) | Port, an den der vorhandene Proxy weiterleitet, und dessen IP-Adresse |
 | **Mailversand** | SMTP-Server, Verschlüsselung (SSL/TLS, STARTTLS, keine), Port, Benutzer, Passwort, Absender. Der Installer prüft, ob der Port erreichbar ist, und schickt nach dem Start eine Testmail |
-| **Erster Administrator** | E-Mail und Name; am Ende erscheint ein Einladungslink (72 Stunden gültig) |
+| **Erster Administrator** | E-Mail und Name; am Ende erscheinen Anmeldeadresse, E-Mail und ein Startpasswort (funktioniert auch ohne Mailversand; nach der Anmeldung 2FA einrichten und eigenes Passwort festlegen) |
 | **Sicherung** | Ziel für restic, Push-Adresse zur Überwachung der Sicherung |
 | **Überwachung** | Optionale Push-Adresse (Uptime Kuma, healthchecks.io), die alle 5 Minuten aufgerufen wird, solange alles läuft |
 | **Absicherung** | Automatische Sicherheitsupdates, Firewall (ufw), fail2ban |
@@ -186,7 +186,7 @@ sudo WIKI_TLS=letsencrypt WIKI_DOMAIN=wiki.firma.de \
 1. Docker Engine mit Compose-Plugin installieren ([Anleitung](https://docs.docker.com/engine/install/ubuntu/)).
 2. `cp .env.example .env && chmod 600 .env`, Geheimnisse mit `openssl rand -hex 32` erzeugen und die Werte eintragen (Kommentare in der Datei).
 3. `docker compose build && docker compose up -d`
-4. `docker compose exec api node dist/cli.js create-admin --email … --name "…"`
+4. `docker compose exec api node dist/cli.js create-admin --email … --name "…"` (gibt ein Startpasswort aus)
 5. Optional `deploy/wikictl` nach `/usr/local/bin/wikictl` verlinken und die Units aus `deploy/systemd/` installieren.
 
 Bestehende Installationen aus Meilenstein 1 bis 3 übernehmen ihre `.env` beim ersten Aufruf von `sudo ./install.sh`; die frühere Datei `deploy/Caddyfile` ist durch `deploy/caddy/` ersetzt. Wichtig: `smtp://` verlangt jetzt STARTTLS. Ein Mailserver ohne Verschlüsselung braucht `?tls=off` am Ende von `SMTP_URL`.

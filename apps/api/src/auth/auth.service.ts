@@ -343,9 +343,54 @@ export class AuthService {
       throw Errors.badRequest('Das aktuelle Passwort ist falsch.', 'INVALID_PASSWORD');
     }
     this.passwords.assertPolicy(newPassword, user.email);
-    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await this.passwords.hash(newPassword) } });
+    if (await this.passwords.verify(user.passwordHash, newPassword)) {
+      throw Errors.badRequest('Das neue Passwort muss sich vom bisherigen unterscheiden.', 'SAME_PASSWORD');
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await this.passwords.hash(newPassword), mustChangePassword: false },
+    });
     // Passwortänderung beendet alle anderen Sitzungen (S4)
     const ended = await this.sessions.destroyAllForUser(user.id, session.id);
     await this.audit.log({ action: 'auth.password.changed', actorId: user.id, ip: client.ip, details: { endedSessions: ended } });
+  }
+
+  // ---------- Startpasswort (nur Kommandozeile) ----------
+
+  /**
+   * Setzt ein zufälliges Startpasswort, das nach der nächsten Anmeldung geändert werden muss.
+   * Für den ersten Administrator und für den Fall, dass der Mailversand nicht funktioniert.
+   * Eingeladene Konten werden dabei aktiviert, offene Einladungen ungültig; alle Sitzungen enden.
+   * Die eingerichtete 2FA bleibt bestehen.
+   */
+  async issueStartPassword(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.status === 'deactivated') throw new Error(`Das Konto ${user.email} ist deaktiviert.`);
+    const password = this.passwords.generate();
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: await this.passwords.hash(password),
+          mustChangePassword: true,
+          status: 'active',
+          failedLogins: 0,
+          lockedUntil: null,
+        },
+      }),
+      this.prisma.invitation.updateMany({
+        where: { userId: user.id, acceptedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+    await this.limiter.clearFailures(`login:${this.accountKey(user.email)}`);
+    const ended = await this.sessions.destroyAllForUser(user.id);
+    await this.audit.log({
+      action: 'cli.password.issued',
+      targetType: 'user',
+      targetId: user.id,
+      details: { email: user.email, endedSessions: ended },
+    });
+    return password;
   }
 }

@@ -27,6 +27,8 @@ export const Errors = {
   forbidden: () => new ApiError(403, 'FORBIDDEN', 'Keine Berechtigung.'),
   stageRequired: (stage: string) =>
     new ApiError(401, 'STAGE_REQUIRED', 'Die Anmeldung ist noch nicht abgeschlossen.', { stage }),
+  passwordChangeRequired: () =>
+    new ApiError(403, 'PASSWORD_CHANGE_REQUIRED', 'Bitte zuerst das Startpasswort ändern.'),
   csrf: () => new ApiError(403, 'CSRF', 'Ungültiges oder fehlendes CSRF-Token.'),
   notFound: () => new ApiError(404, 'NOT_FOUND', 'Nicht gefunden.'),
   invalidToken: () => new ApiError(400, 'INVALID_TOKEN', 'Der Link ist ungültig oder abgelaufen.'),

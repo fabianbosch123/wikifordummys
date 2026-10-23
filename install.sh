@@ -663,7 +663,9 @@ create_admin() {
   step "Administrator anlegen"
   local out
   if out=$(compose exec -T api node dist/cli.js create-admin --email "$ADMIN_EMAIL" --name "$ADMIN_NAME" 2>&1); then
-    INVITE_URL=$(grep -o 'https\?://[^[:space:]]*' <<<"$out" | head -1)
+    # Startpasswort nur im Speicher halten und am Ende anzeigen, nirgends speichern
+    ADMIN_PASSWORD=$(sed -n 's/^  Passwort: *//p' <<<"$out" | head -1)
+    LOGIN_URL=$(sed -n 's/^  Anmeldung: *//p' <<<"$out" | head -1)
     ok "Administrator $ADMIN_EMAIL angelegt."
   else
     warn "${out#Fehler: }"
@@ -750,11 +752,15 @@ EOF
 final_notes() {
   step "Fertig"
   info "Das Wiki läuft unter ${C_BOLD}https://$WIKI_DOMAIN${C_RESET}"
-  if [[ -n ${INVITE_URL:-} ]]; then
+  if [[ -n ${ADMIN_PASSWORD:-} ]]; then
     echo
-    info "Einladungslink für $ADMIN_EMAIL (72 Stunden gültig):"
-    info "  $INVITE_URL"
-    info "Dort Passwort festlegen und die Zwei-Faktor-Anmeldung mit einer Authenticator-App einrichten."
+    info "${C_BOLD}Erste Anmeldung als Administrator${C_RESET} (funktioniert auch ohne Mailversand):"
+    info "  Adresse:   ${LOGIN_URL:-https://$WIKI_DOMAIN/login}"
+    info "  E-Mail:    $ADMIN_EMAIL"
+    info "  Passwort:  ${C_BOLD}$ADMIN_PASSWORD${C_RESET}"
+    info "Das Startpasswort wird nur jetzt angezeigt und nirgends gespeichert. Bei der Anmeldung wird die"
+    info "Zwei-Faktor-Anmeldung eingerichtet, danach muss ein eigenes Passwort festgelegt werden."
+    info "Passwort vergessen oder verloren: sudo wikictl reset-password --email $ADMIN_EMAIL"
   fi
   case $WIKI_TLS in
     internal)
