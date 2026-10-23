@@ -187,4 +187,7 @@ jobs:
           if-no-files-found: ignore
       - name: Logs bei Fehlern
         if: failure()
-        run: sudo docker compose logs --tail 200
+        run: |
+          sudo docker compose --profile office logs --tail 200 || true
+          id=$(sudo docker compose --profile office ps -q office 2>/dev/null || true)
+          if [ -n "$id" ]; then sudo docker inspect -f '{{json .State.Health}}' "$id"; fi
