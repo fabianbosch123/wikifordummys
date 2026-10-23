@@ -26,6 +26,10 @@ const schema = z
     RATE_LOGIN_PER_MINUTE: z.coerce.number().int().positive().default(5),
     RATE_RESET_PER_HOUR: z.coerce.number().int().positive().default(3),
     RATE_API_PER_MINUTE: z.coerce.number().int().positive().default(300),
+    /** Verzeichnis für Anhänge, außerhalb des Web-Roots (S7); im Container ein eigenes Volume */
+    ATTACHMENTS_DIR: z.string().min(1).default('/var/lib/wiki/attachments'),
+    /** Höchstgröße eines Anhangs in MiB (S7) */
+    ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(1024).default(50),
     /** Argon2-Kosten; nur in Tests herabsetzen */
     ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(65536),
     ARGON2_TIME_COST: z.coerce.number().int().min(1).default(3),

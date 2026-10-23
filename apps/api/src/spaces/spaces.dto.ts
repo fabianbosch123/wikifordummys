@@ -1,5 +1,6 @@
-import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUUID, Length, Matches, MaxLength, ValidateNested } from 'class-validator';
+import { SPACE_ROLES, type SpaceRole } from '@wiki/shared';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -25,6 +26,11 @@ export class CreateSpaceDto {
   @IsString()
   @MaxLength(1000)
   description?: string;
+
+  /** true (Standard): alle Benutzer dürfen bearbeiten; false: nur der Ersteller, weitere Rollen vergibt er selbst */
+  @IsOptional()
+  @IsBoolean()
+  open?: boolean;
 }
 
 export class UpdateSpaceDto {
@@ -50,4 +56,23 @@ export class ListSpacesQuery {
   @IsOptional()
   @IsIn(['active', 'archived'])
   status?: 'active' | 'archived';
+}
+
+export class SubjectRoleDto {
+  @IsIn(['group', 'user'])
+  type: 'group' | 'user';
+
+  @IsUUID('all')
+  id: string;
+
+  @IsIn(SPACE_ROLES)
+  role: SpaceRole;
+}
+
+export class SetSpacePermissionsDto {
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => SubjectRoleDto)
+  entries: SubjectRoleDto[];
 }

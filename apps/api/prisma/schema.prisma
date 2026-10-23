@@ -1,5 +1,6 @@
 // Datenmodell Meilenstein 1: Benutzer, Gruppen, Einladungen, 2FA, Audit-Log.
 // Meilenstein 2: Spaces, Seitenbaum, Seitenversionen.
+// Meilenstein 3: Space-Rollen, Seiteneinschränkungen, Anhänge, Volltextsuche.
 
 generator client {
   provider      = "prisma-client-js"
@@ -23,33 +24,36 @@ enum GlobalPermissionType {
 }
 
 model User {
-  id            String     @id @default(uuid()) @db.Uuid
-  email         String     @unique
-  displayName   String     @map("display_name")
-  passwordHash  String?    @map("password_hash")
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  displayName  String     @map("display_name")
+  passwordHash String?    @map("password_hash")
   /// AES-256-GCM-verschlüsselt (S2)
-  totpSecret    String?    @map("totp_secret")
-  totpEnabled   Boolean    @default(false) @map("totp_enabled")
+  totpSecret   String?    @map("totp_secret")
+  totpEnabled  Boolean    @default(false) @map("totp_enabled")
   /// Zuletzt verwendeter TOTP-Zeitschritt, damit ein Code nur einmal gilt (S2)
-  totpLastStep  Int?       @map("totp_last_step")
-  status        UserStatus @default(invited)
-  failedLogins  Int        @default(0) @map("failed_logins")
-  lockedUntil   DateTime?  @map("locked_until")
-  lastLoginAt   DateTime?  @map("last_login_at")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  totpLastStep Int?       @map("totp_last_step")
+  status       UserStatus @default(invited)
+  failedLogins Int        @default(0) @map("failed_logins")
+  lockedUntil  DateTime?  @map("locked_until")
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   recoveryCodes  RecoveryCode[]
-  invitations    Invitation[]    @relation("InvitationUser")
-  invitesSent    Invitation[]    @relation("InvitationInviter")
+  invitations    Invitation[]      @relation("InvitationUser")
+  invitesSent    Invitation[]      @relation("InvitationInviter")
   passwordResets PasswordReset[]
   groups         GroupMember[]
   auditEntries   AuditLog[]
-  spacesCreated  Space[]         @relation("SpaceCreator")
-  pagesCreated   Page[]          @relation("PageCreator")
-  pagesUpdated   Page[]          @relation("PageUpdater")
-  pagesDeleted   Page[]          @relation("PageDeleter")
+  spacesCreated  Space[]           @relation("SpaceCreator")
+  pagesCreated   Page[]            @relation("PageCreator")
+  pagesUpdated   Page[]            @relation("PageUpdater")
+  pagesDeleted   Page[]            @relation("PageDeleter")
   pageVersions   PageVersion[]
+  spaceRoles     SpacePermission[]
+  restrictions   PageRestriction[]
+  attachments    Attachment[]
 
   @@map("users")
 }
@@ -94,14 +98,16 @@ model PasswordReset {
 }
 
 model Group {
-  id          String             @id @default(uuid()) @db.Uuid
-  name        String             @unique
-  description String             @default("")
+  id           String             @id @default(uuid()) @db.Uuid
+  name         String             @unique
+  description  String             @default("")
   /// Systemgruppen (alle-benutzer, administratoren) können nicht gelöscht werden
-  system      Boolean            @default(false)
-  createdAt   DateTime           @default(now()) @map("created_at")
-  members     GroupMember[]
-  permissions GlobalPermission[]
+  system       Boolean            @default(false)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  members      GroupMember[]
+  permissions  GlobalPermission[]
+  spaceRoles   SpacePermission[]
+  restrictions PageRestriction[]
 
   @@map("groups")
 }
@@ -149,57 +155,87 @@ enum SpaceStatus {
 }
 
 model Space {
-  id          String      @id @default(uuid()) @db.Uuid
+  id          String            @id @default(uuid()) @db.Uuid
   /// Kurzschlüssel wie IT oder HR, Großbuchstaben und Ziffern
-  key         String      @unique
+  key         String            @unique
   name        String
-  description String      @default("")
-  status      SpaceStatus @default(active)
-  homePageId  String?     @unique @map("home_page_id") @db.Uuid
-  createdById String?     @map("created_by") @db.Uuid
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
-  homePage    Page?       @relation("SpaceHome", fields: [homePageId], references: [id], onDelete: SetNull)
-  createdBy   User?       @relation("SpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  pages       Page[]      @relation("SpacePages")
+  description String            @default("")
+  status      SpaceStatus       @default(active)
+  homePageId  String?           @unique @map("home_page_id") @db.Uuid
+  createdById String?           @map("created_by") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  homePage    Page?             @relation("SpaceHome", fields: [homePageId], references: [id], onDelete: SetNull)
+  createdBy   User?             @relation("SpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  pages       Page[]            @relation("SpacePages")
+  permissions SpacePermission[]
 
   @@map("spaces")
 }
 
+enum SpaceRole {
+  admin
+  editor
+  viewer
+}
+
+/// Rolle einer Gruppe oder eines einzelnen Benutzers in einem Space; genau eins von beiden ist gesetzt
+model SpacePermission {
+  id      String    @id @default(uuid()) @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  groupId String?   @map("group_id") @db.Uuid
+  userId  String?   @map("user_id") @db.Uuid
+  role    SpaceRole
+  space   Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  group   Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, groupId])
+  @@unique([spaceId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@map("space_permissions")
+}
+
 /// Aktueller Stand einer Seite. Jede Speicherung legt zusätzlich eine unveränderliche PageVersion an.
 model Page {
-  id          String        @id @default(uuid()) @db.Uuid
-  spaceId     String        @map("space_id") @db.Uuid
-  parentId    String?       @map("parent_id") @db.Uuid
+  id           String                   @id @default(uuid()) @db.Uuid
+  spaceId      String                   @map("space_id") @db.Uuid
+  parentId     String?                  @map("parent_id") @db.Uuid
   /// Materialisierter Pfad aus allen Vorfahren und der Seite selbst: /<id>/<id>/
-  path        String
+  path         String
   /// Reihenfolge unter Geschwistern, beginnend bei 0
-  position    Int
-  title       String
+  position     Int
+  title        String
   /// TipTap-JSON, nur erlaubte Knoten (S6)
-  content     Json
-  /// Reiner Text für Vergleich und spätere Volltextsuche
-  contentText String        @map("content_text")
-  version     Int           @default(1)
-  createdById String?       @map("created_by") @db.Uuid
-  updatedById String?       @map("updated_by") @db.Uuid
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  content      Json
+  /// Reiner Text für Vergleich und Volltextsuche
+  contentText  String                   @map("content_text")
+  /// Von PostgreSQL berechnet (generierte Spalte, deutsches Wörterbuch): Titel Gewicht A, Inhalt Gewicht B
+  searchVector Unsupported("tsvector")? @map("search_vector")
+  version      Int                      @default(1)
+  createdById  String?                  @map("created_by") @db.Uuid
+  updatedById  String?                  @map("updated_by") @db.Uuid
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  updatedAt    DateTime                 @updatedAt @map("updated_at")
   /// Papierkorb: gesetzt für die gelöschte Seite und alle mitgelöschten Unterseiten
-  deletedAt   DateTime?     @map("deleted_at")
-  deletedById String?       @map("deleted_by") @db.Uuid
-  space       Space         @relation("SpacePages", fields: [spaceId], references: [id], onDelete: Cascade)
-  parent      Page?         @relation("PageTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children    Page[]        @relation("PageTree")
-  homeOf      Space?        @relation("SpaceHome")
-  createdBy   User?         @relation("PageCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedBy   User?         @relation("PageUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
-  deletedBy   User?         @relation("PageDeleter", fields: [deletedById], references: [id], onDelete: Restrict)
-  versions    PageVersion[]
+  deletedAt    DateTime?                @map("deleted_at")
+  deletedById  String?                  @map("deleted_by") @db.Uuid
+  space        Space                    @relation("SpacePages", fields: [spaceId], references: [id], onDelete: Cascade)
+  parent       Page?                    @relation("PageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Page[]                   @relation("PageTree")
+  homeOf       Space?                   @relation("SpaceHome")
+  createdBy    User?                    @relation("PageCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy    User?                    @relation("PageUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  deletedBy    User?                    @relation("PageDeleter", fields: [deletedById], references: [id], onDelete: Restrict)
+  versions     PageVersion[]
+  restrictions PageRestriction[]
+  attachments  Attachment[]
 
   @@index([spaceId, parentId])
   @@index([spaceId, path])
   @@index([deletedAt])
+  @@index([searchVector], type: Gin)
   @@map("pages")
 }
 
@@ -220,4 +256,46 @@ model PageVersion {
 
   @@unique([pageId, version])
   @@map("page_versions")
+}
+
+enum RestrictionType {
+  view
+  edit
+}
+
+/// Einschränkung einer Seite samt Unterseiten auf genannte Gruppen oder Benutzer; genau eins von beiden ist gesetzt
+model PageRestriction {
+  id      String          @id @default(uuid()) @db.Uuid
+  pageId  String          @map("page_id") @db.Uuid
+  type    RestrictionType
+  groupId String?         @map("group_id") @db.Uuid
+  userId  String?         @map("user_id") @db.Uuid
+  page    Page            @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  group   Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, type, groupId])
+  @@unique([pageId, type, userId])
+  @@map("page_restrictions")
+}
+
+/// Datei an einer Seite. Der Inhalt liegt unter storage_key im Anhang-Verzeichnis, nicht in der Datenbank.
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  pageId       String   @map("page_id") @db.Uuid
+  /// Bereinigter Original-Dateiname, nur für die Anzeige und den Download
+  filename     String
+  /// Am Inhalt erkannter Typ (S7); unbekannte Typen sind application/octet-stream
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  /// Zufälliger Name im Anhang-Verzeichnis
+  storageKey   String   @unique @map("storage_key")
+  sha256       String
+  uploadedById String?  @map("uploaded_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  page         Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([pageId])
+  @@map("attachments")
 }

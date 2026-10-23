@@ -7,7 +7,7 @@ import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
 import { Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
-import { AuthContext, clientIp, userAgent, WikiRequest } from '../common/request-context';
+import { AuthContext, clientIp, meDto, userAgent, WikiRequest } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
 
 class UpdateMeDto {
@@ -43,13 +43,13 @@ export class MeController {
 
   @Get()
   me(@Auth() ctx: AuthContext): MeDto {
-    return ctx.user;
+    return meDto(ctx.user);
   }
 
   @Patch()
   async update(@Body() dto: UpdateMeDto, @Auth() ctx: AuthContext): Promise<MeDto> {
     await this.prisma.user.update({ where: { id: ctx.user.id }, data: { displayName: dto.displayName } });
-    return { ...ctx.user, displayName: dto.displayName };
+    return { ...meDto(ctx.user), displayName: dto.displayName };
   }
 
   @Post('password')

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * Content-Security-Policy mit Nonce je Anfrage (S6): nur Skripte mit passender Nonce laufen,
  * eingeschleuste Inline-Skripte nicht. Next.js versieht seine eigenen Skripte automatisch mit der Nonce.
- * Bilder dürfen per https eingebunden werden, bis Anhänge mit Meilenstein 3 kommen.
+ * Bilder kommen als Anhang vom eigenen Server oder per https-Adresse.
  */
 export function middleware(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());

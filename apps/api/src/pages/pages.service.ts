@@ -18,10 +18,11 @@ import {
 } from '@wiki/shared';
 import { diffArrays } from 'diff';
 import { AuditService } from '../audit/audit.service';
-import { Errors } from '../common/errors';
+import { ApiError, Errors } from '../common/errors';
 import type { AuthContext, AuthUser } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
-import { PermissionService, type SpaceAccess } from '../spaces/permission.service';
+import { AttachmentStorageService } from '../attachments/attachment-storage.service';
+import { pathIds, PermissionService, type PageAccess } from '../spaces/permission.service';
 import { userRef } from '../spaces/spaces.service';
 import type { CreatePageDto, MovePageDto, UpdatePageDto } from './pages.dto';
 
@@ -31,9 +32,6 @@ const userSelect = { select: { id: true, displayName: true } } as const;
 const DAY_MS = 24 * 3600 * 1000;
 
 const json = (doc: DocNode) => doc as unknown as Prisma.InputJsonValue;
-
-/** Seiten-IDs aus dem materialisierten Pfad /a/b/c/ */
-const pathIds = (path: string) => path.split('/').filter(Boolean);
 
 function parseContent(raw: unknown): { content: DocNode; contentText: string } {
   try {
@@ -54,11 +52,12 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionService,
     private readonly audit: AuditService,
+    private readonly storage: AttachmentStorageService,
   ) {}
 
   // ---------- Lesen ----------
 
-  private async toDto(page: Page, access: SpaceAccess): Promise<PageDto> {
+  private async toDto({ page, ...access }: PageAccess): Promise<PageDto> {
     const full = await this.prisma.page.findUniqueOrThrow({
       where: { id: page.id },
       include: { createdBy: userSelect, updatedBy: userSelect },
@@ -82,21 +81,40 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
       updatedAt: full.updatedAt.toISOString(),
       canEdit: access.canEdit,
       canDelete: access.canEdit && access.role === 'admin' && !isHome,
+      canRestrict: access.canEdit,
+      restricted: access.restricted,
     };
   }
 
   async get(user: AuthUser, id: string): Promise<PageDto> {
-    const { page, ...access } = await this.permissions.requirePage(user, id, 'view');
-    return this.toDto(page, access);
+    return this.toDto(await this.permissions.requirePage(user, id, 'view'));
   }
 
+  /** Seitenbaum ohne die Seiten, die der Benutzer wegen Einschränkungen nicht sehen darf (S8) */
   async tree(user: AuthUser, key: string): Promise<TreeNodeDto[]> {
-    const { space } = await this.permissions.requireSpace(user, key, 'view');
-    return this.prisma.page.findMany({
-      where: { spaceId: space.id, deletedAt: null },
-      select: { id: true, parentId: true, title: true, position: true },
+    const access = await this.permissions.requireSpace(user, key, 'view');
+    const visible = await this.permissions.visibility(user, access);
+    const pages = await this.prisma.page.findMany({
+      where: { spaceId: access.space.id, deletedAt: null },
+      select: { id: true, parentId: true, title: true, position: true, path: true },
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     });
+    return pages.filter((p) => visible(p.path)).map(({ path: _path, ...node }) => node);
+  }
+
+  /**
+   * Eine neue Elternseite muss der Benutzer sehen und bearbeiten dürfen, weil ihre Einschränkungen
+   * an die Unterseiten vererbt werden. Unsichtbare Seiten verhalten sich wie nicht vorhandene.
+   */
+  private async checkParent(user: AuthUser, spaceId: string, parentId: string) {
+    const parent = await this.prisma.page.findUnique({ where: { id: parentId }, select: { spaceId: true, deletedAt: true } });
+    if (!parent || parent.spaceId !== spaceId || parent.deletedAt) return; // meldet liveParent mit 400
+    try {
+      await this.permissions.requirePage(user, parentId, 'edit');
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'NOT_FOUND') throw Errors.badRequest('Die übergeordnete Seite existiert nicht.');
+      throw err;
+    }
   }
 
   // ---------- Hilfen für den Seitenbaum ----------
@@ -148,6 +166,7 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
     const access = await this.permissions.requireSpace(ctx.user, dto.spaceKey, 'edit');
     const { content, contentText } = parseContent(dto.content);
     const spaceId = access.space.id;
+    if (dto.parentId) await this.checkParent(ctx.user, spaceId, dto.parentId);
     const id = randomUUID();
     await this.prisma.$transaction(async (tx) => {
       await this.lockSpace(tx, spaceId);
@@ -177,7 +196,7 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
    * gibt es 409 mit dem aktuellen Stand, damit nichts unbemerkt überschrieben wird.
    */
   async update(id: string, dto: UpdatePageDto, ctx: AuthContext): Promise<PageDto> {
-    const { page: loaded, ...access } = await this.permissions.requirePage(ctx.user, id, 'edit');
+    const access = await this.permissions.requirePage(ctx.user, id, 'edit');
     const { content, contentText } = parseContent(dto.content);
     const outcome = await this.prisma.$transaction(async (tx) => {
       const page = await this.lockPage(tx, id);
@@ -195,7 +214,7 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
       return 'saved' as const;
     });
     if (outcome === 'conflict') {
-      throw Errors.conflict('Die Seite wurde inzwischen geändert.', { current: await this.toDto(loaded, access) });
+      throw Errors.conflict('Die Seite wurde inzwischen geändert.', { current: await this.toDto(access) });
     }
     return this.get(ctx.user, id);
   }
@@ -205,6 +224,7 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
   async move(id: string, dto: MovePageDto, ctx: AuthContext): Promise<PageDto> {
     const { page, space } = await this.permissions.requirePage(ctx.user, id, 'edit');
     if (space.homePageId === id) throw Errors.badRequest('Die Startseite eines Spaces kann nicht verschoben werden.');
+    if (dto.parentId) await this.checkParent(ctx.user, space.id, dto.parentId);
     await this.prisma.$transaction(async (tx) => {
       await this.lockSpace(tx, space.id);
       const current = await this.lockPage(tx, page.id);
@@ -306,8 +326,12 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
 
   async purgeTrash(now = new Date()): Promise<number> {
     const cutoff = new Date(now.getTime() - TRASH_RETENTION_DAYS * DAY_MS);
-    // Unterseiten und Versionen werden per Fremdschlüssel mitgelöscht
-    const { count } = await this.prisma.page.deleteMany({ where: { deletedAt: { lt: cutoff } } });
+    const expired = { deletedAt: { lt: cutoff } };
+    // Dateien merken, bevor die Zeilen verschwinden; die Dateien erst nach der Datenbank löschen
+    const files = await this.prisma.attachment.findMany({ where: { page: expired }, select: { storageKey: true } });
+    // Unterseiten, Versionen, Einschränkungen und Anhänge werden per Fremdschlüssel mitgelöscht
+    const { count } = await this.prisma.page.deleteMany({ where: expired });
+    await this.storage.remove(files.map((f) => f.storageKey));
     return count;
   }
 

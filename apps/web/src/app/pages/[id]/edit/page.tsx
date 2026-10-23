@@ -33,6 +33,7 @@ function EditPage() {
             initialTitle={p.title}
             initialContent={p.content}
             tree={tree}
+            pageId={p.id}
             submitLabel="Speichern"
             onCancel={() => router.push(`/pages/${p.id}`)}
             onSubmit={async (title, content, force) => {

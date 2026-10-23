@@ -17,6 +17,8 @@ interface Props {
   initialTitle: string;
   initialContent: DocNode;
   tree: TreeNodeDto[];
+  /** Bei bestehenden Seiten: erlaubt das Hochladen von Bildern */
+  pageId?: string;
   submitLabel: string;
   /** Speichert; liefert ApiError mit Code CONFLICT, wenn jemand anderes inzwischen gespeichert hat */
   onSubmit: (title: string, content: DocNode, force: boolean) => Promise<void>;
@@ -24,7 +26,7 @@ interface Props {
 }
 
 /** Titel und Editor mit Speichern, Konfliktanzeige und Warnung vor ungespeicherten Änderungen */
-export function PageForm({ initialTitle, initialContent, tree, submitLabel, onSubmit, onCancel }: Props) {
+export function PageForm({ initialTitle, initialContent, tree, pageId, submitLabel, onSubmit, onCancel }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const content = useRef<DocNode>(initialContent);
   const [dirty, setDirty] = useState(false);
@@ -89,6 +91,7 @@ export function PageForm({ initialTitle, initialContent, tree, submitLabel, onSu
       <WikiEditor
         initial={initialContent}
         pages={tree}
+        pageId={pageId}
         onChange={(doc) => {
           content.current = doc;
           setDirty(true);

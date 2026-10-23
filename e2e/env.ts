@@ -9,6 +9,7 @@ export const e2eEnv: Record<string, string> = {
   SESSION_SECRET: 'e2e-secret-e2e-secret-e2e-secret-1234',
   COOKIE_SECURE: 'false',
   TRUST_PROXY: '1',
+  ATTACHMENTS_DIR: process.env.E2E_ATTACHMENTS_DIR ?? `${process.env.TMPDIR ?? '/tmp'}/wiki-e2e-attachments`,
   // Muss zur Adresse passen, mit der die Weboberfläche gebaut wurde (Standard)
   API_INTERNAL_URL: 'http://localhost:3001',
 };

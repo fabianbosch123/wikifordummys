@@ -1,4 +1,4 @@
-import type { ApiErrorBody } from '@wiki/shared';
+import type { ApiErrorBody, AttachmentDto } from '@wiki/shared';
 
 export class ApiError extends Error {
   constructor(
@@ -60,6 +60,26 @@ export async function api<T = unknown>(path: string, options: { method?: string;
     csrfToken = (body as { csrfToken: string }).csrfToken;
   }
   return body as T;
+}
+
+/** Lädt eine Datei als Anhang einer Seite hoch; der Inhalt geht direkt als Body an die API */
+export async function uploadAttachment(pageId: string, file: File): Promise<AttachmentDto> {
+  const send = async (token: string) =>
+    fetch(`/api/v1/pages/${pageId}/attachments?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': token },
+      credentials: 'same-origin',
+      body: file,
+    });
+  let res = await send(csrfToken ?? (await fetchCsrf()));
+  if (res.status === 403 && (await res.clone().json().catch(() => null))?.error?.code === 'CSRF') res = await send(await fetchCsrf());
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = (body as ApiErrorBody | null)?.error;
+    if (res.status === 413 && !err) throw new ApiError(413, 'TOO_LARGE', 'Die Datei ist zu groß.', null);
+    throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? 'Unbekannter Fehler', body);
+  }
+  return body as AttachmentDto;
 }
 
 export function errorMessage(err: unknown): string {

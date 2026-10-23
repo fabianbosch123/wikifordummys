@@ -45,6 +45,9 @@ services:
       MAIL_FROM: ${MAIL_FROM:-wikifordummys <wiki@localhost>}
       COOKIE_SECURE: "true"
       TRUST_PROXY: "1"
+      ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-50}
+    volumes:
+      - attachments:/var/lib/wiki/attachments
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -95,3 +98,4 @@ volumes:
   caddy_config: {}
   pgdata: {}
   redisdata: {}
+  attachments: {}

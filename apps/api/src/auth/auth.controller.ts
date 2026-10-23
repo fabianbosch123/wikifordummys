@@ -5,7 +5,7 @@ import { APP_CONFIG, AppConfig } from '../config';
 import { AuditService } from '../audit/audit.service';
 import { clearSessionCookie, setCsrfCookie, setSessionCookie } from '../common/cookies';
 import { AllowStages, Auth, Public } from '../common/decorators';
-import { AuthContext, clientIp, userAgent, WikiRequest } from '../common/request-context';
+import { AuthContext, clientIp, meDto, userAgent, WikiRequest } from '../common/request-context';
 import { CryptoService } from '../infra/crypto.service';
 import { AuthService, ClientInfo } from './auth.service';
 import { AcceptInviteDto, CodeDto, ForgotPasswordDto, LoginDto, ResetPasswordDto, TotpCodeDto } from './dto';
@@ -51,7 +51,7 @@ export class AuthController {
     return {
       authenticated: session.stage === 'full',
       stage: session.stage,
-      user: session.stage === 'full' ? user : null,
+      user: session.stage === 'full' ? meDto(user) : null,
     };
   }
 

@@ -1,5 +1,20 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateIf } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  Max,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { PAGE_TITLE_MAX_LENGTH } from '@wiki/shared';
 import { NO_CONTROL_CHARS } from '../spaces/spaces.dto';
 
@@ -57,4 +72,28 @@ export class DiffQuery {
   @IsInt()
   @Min(1)
   to: number;
+}
+
+export class SubjectRefDto {
+  @IsIn(['group', 'user'])
+  type: 'group' | 'user';
+
+  @IsUUID('all')
+  id: string;
+}
+
+export class SetRestrictionsDto {
+  /** Nur diese Gruppen und Personen sehen die Seite samt Unterseiten; leer = keine Einschränkung */
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => SubjectRefDto)
+  view: SubjectRefDto[];
+
+  /** Nur diese Gruppen und Personen bearbeiten die Seite samt Unterseiten; leer = keine Einschränkung */
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => SubjectRefDto)
+  edit: SubjectRefDto[];
 }
