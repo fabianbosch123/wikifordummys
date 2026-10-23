@@ -17,13 +17,13 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | zeigt ein Startpasswort an; `--invite` für Einladungslink per Mail |
 | Passwort zurücksetzen ohne Mail | `sudo wikictl reset-password --email …` | neues Startpasswort, alle Sitzungen enden, 2FA bleibt |
 | Einstellungen ändern | `sudo wikictl reconfigure` (startet den Installer) | |
-| Office-Editor prüfen | `sudo wikictl office-check` | |
+| Office-Editor an/aus, prüfen | `sudo wikictl office on\|off`, `sudo wikictl office-check` | |
 
 Timer ansehen: `systemctl list-timers 'wikifordummys-*'`, letzte Läufe: `journalctl -u wikifordummys-backup.service`.
 
 ## Office-Editor
 
-Der optionale Office-Editor ist [Euro-Office](https://github.com/euro-office) (AGPL-3.0, europäischer Fork von ONLYOFFICE Docs). Er öffnet DOCX, XLSX, PPTX, ODT, ODS und ODP zum Ansehen und gemeinsamen Bearbeiten; DOC, XLS und PPT nur zum Ansehen. Der Installer fragt, ob er laufen soll (`WIKI_OFFICE=true` in `.env`); an- und abschalten mit `sudo wikictl reconfigure`.
+Der optionale Office-Editor ist [Euro-Office](https://github.com/euro-office) (AGPL-3.0, europäischer Fork von ONLYOFFICE Docs). Er öffnet DOCX, XLSX, PPTX, ODT, ODS und ODP zum Ansehen und gemeinsamen Bearbeiten; DOC, XLS und PPT nur zum Ansehen. Der Installer fragt, ob er laufen soll (`WIKI_OFFICE=true` in `.env`). Bestehende Installationen fragt `sudo wikictl update` einmal danach (ohne Terminal bleibt er aus). An- und abschalten jederzeit mit `sudo wikictl office on` bzw. `off`.
 
 - **Ressourcen:** etwa 2 CPU-Kerne und 4 GB Arbeitsspeicher zusätzlich, Server mit 8 GB empfohlen. Der erste Start dauert einige Minuten.
 - **Aufbau:** Dienst `office` (Image `ghcr.io/euro-office/documentserver`, Version über `OFFICE_VERSION`), erreichbar unter `https://<domain>/office/`. Er hängt nur im internen Docker-Netz `office` zusammen mit Caddy und API und hat keinen Zugang ins Internet.
@@ -41,7 +41,7 @@ sudo wikictl update            # neuester Stand des aktuellen Branches
 sudo wikictl update v0.4.0     # bestimmter Tag oder Commit
 ```
 
-Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container und wartet, bis die API gesund ist. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
+Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor) fragt es einmal ab. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
 
 Ubuntu-Sicherheitsupdates laufen automatisch (unattended-upgrades), sofern im Installer gewählt. Docker-Basis-Images werden bei `wikictl update` mit `--pull` aktualisiert.
 

@@ -28,7 +28,8 @@ Benutzer und Mail
                           (z. B. wenn der Mailversand nicht funktioniert)
   mail-test [--to <adresse>]                        Mailversand prüfen
 
-Office-Editor (WIKI_OFFICE=true in .env, an- und abschalten mit reconfigure)
+Office-Editor (WIKI_OFFICE in .env)
+  office on | off         Office-Editor einrichten bzw. abschalten (das Update fragt einmal danach)
   office-check            Editor-Server, JWT-Geheimnis und Dateiaustausch prüfen
 
 Sicherung (restic, Ziel aus .env)
@@ -126,10 +127,25 @@ cmd_update() {
     git -C "$WIKI_DIR" pull --ff-only --quiet
   fi
   info "Stand: $before → $(git -C "$WIKI_DIR" rev-parse --short HEAD)"
+  # Ab hier mit dem neuen Stand von wikictl weitermachen, damit neue Schritte schon bei diesem Update greifen
+  exec "$WIKI_DIR/deploy/wikictl" update-apply "$before"
+}
+
+# Zweiter Teil des Updates, läuft bereits mit dem neuen Stand des Skripts
+cmd_update_apply() {
+  need_root
+  need_env
+  local before=${1:-}
+  if [[ -z $(env_get WIKI_OFFICE) ]]; then offer_office; fi
   step "Bauen und neu starten"
   compose build --pull
+  if [[ $(env_get WIKI_OFFICE) != true ]]; then
+    compose --profile office rm -sf office >/dev/null 2>&1 || true
+  fi
   compose up -d --remove-orphans
+  reload_caddy
   if wait_healthy 300; then
+    wait_office
     ok "Update abgeschlossen."
   else
     compose logs --tail 40 api
@@ -140,6 +156,60 @@ cmd_update() {
     # Neue Container schreiben in neue Logdateien; fail2ban liest die Dateiliste nur beim Laden
     fail2ban-client reload wikifordummys >/dev/null 2>&1 || true
   fi
+}
+
+# Neu seit dem Update: Office-Editor anbieten (nur einmal; die Antwort landet in .env)
+offer_office() {
+  step "Neu: Office-Editor"
+  info "Word-, Excel- und PowerPoint-Anhänge lassen sich jetzt mit Euro-Office im Wiki ansehen und gemeinsam"
+  info "bearbeiten (zusätzlicher Dienst, etwa 4 GB Arbeitsspeicher mehr; 8 GB empfohlen)."
+  local default=j answer
+  if ! office_mem_ok; then
+    warn "Dieser Server hat $(mem_gb) GB Arbeitsspeicher."
+    default=n
+  fi
+  if [[ -t 0 ]]; then
+    read -r -p "Office-Editor jetzt einrichten? $([[ $default == j ]] && echo '[J/n]' || echo '[j/N]'): " answer || answer=''
+    answer=${answer:-$default}
+  else
+    answer=n
+  fi
+  case ${answer,,} in
+    j | ja | y | yes)
+      office_set true
+      ok "Office-Editor wird mit diesem Update eingerichtet."
+      ;;
+    *)
+      office_set false
+      info "Office-Editor bleibt aus. Später einschalten mit: sudo wikictl office on"
+      ;;
+  esac
+}
+
+# Office-Editor an- oder abschalten, ohne den ganzen Installer
+cmd_office() {
+  need_root
+  need_env
+  case ${1:-} in
+    on)
+      if ! office_mem_ok; then warn "Dieser Server hat $(mem_gb) GB Arbeitsspeicher; für Wiki und Editor sind 8 GB empfohlen."; fi
+      office_set true
+      compose up -d --remove-orphans
+      reload_caddy
+      wait_office
+      compose exec -T api node dist/cli.js office-check || warn "Prüfung fehlgeschlagen; erneut mit: sudo wikictl office-check"
+      ;;
+    off)
+      office_set false
+      compose --profile office rm -sf office >/dev/null 2>&1 || true
+      compose up -d --remove-orphans
+      ok "Office-Editor abgeschaltet. Anhänge bleiben unverändert erhalten."
+      ;;
+    *)
+      echo "Verwendung: sudo wikictl office on|off" >&2
+      exit 2
+      ;;
+  esac
 }
 
 cmd_backup_init() {
@@ -403,6 +473,8 @@ main() {
     stop) need_env && compose stop ;;
     restart) need_env && compose restart "$@" ;;
     update) cmd_update "$@" ;;
+    update-apply) cmd_update_apply "$@" ;;
+    office) cmd_office "$@" ;;
     reconfigure) exec "$WIKI_DIR/install.sh" "$@" ;;
     create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
     reset-password) need_env && compose exec -T api node dist/cli.js reset-password "$@" ;;
