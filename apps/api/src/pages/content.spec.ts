@@ -1,4 +1,4 @@
-import { ContentError, docToLines, docToText, sanitizeDoc, type DocNode } from '@wiki/shared';
+import { ContentError, docToLines, docToText, sanitizeDoc, tableLayout, type DocNode } from '@wiki/shared';
 
 const doc = (...content: DocNode[]): DocNode => ({ type: 'doc', content });
 const p = (text: string, marks?: DocNode['marks']): DocNode => ({ type: 'paragraph', content: [{ type: 'text', text, marks }] });
@@ -95,6 +95,24 @@ describe('Inhaltsprüfung (S6)', () => {
 
   it('ergänzt einen leeren Absatz für leere Dokumente', () => {
     expect(sanitizeDoc({ type: 'doc' })).toEqual({ type: 'doc', content: [{ type: 'paragraph' }] });
+  });
+});
+
+describe('Spaltenbreiten für die Ansicht', () => {
+  const row = (...cells: Record<string, unknown>[]): DocNode => ({ type: 'tableRow', content: cells.map((attrs) => ({ type: 'tableCell', attrs })) });
+  const table = (...rows: DocNode[]): DocNode => ({ type: 'table', content: rows });
+
+  it('setzt eine feste Breite, wenn alle Spalten gezogen wurden', () => {
+    expect(tableLayout(table(row({ colwidth: [120] }, { colspan: 2, colwidth: [200, 30] })))).toEqual({ columns: [120, 200, 40], width: 360 });
+  });
+
+  it('rechnet automatische Spalten als Mindestbreite', () => {
+    expect(tableLayout(table(row({ colwidth: [150] }, {}), row({ colwidth: [999] }, {})))).toEqual({ columns: [150, null], minWidth: 190 });
+    expect(tableLayout(table(row({}, { colspan: 2, colwidth: [0, 80] })))).toEqual({ columns: [null, null, 80], minWidth: 160 });
+  });
+
+  it('kommt mit leeren Tabellen zurecht', () => {
+    expect(tableLayout(table())).toEqual({ columns: [] });
   });
 });
 

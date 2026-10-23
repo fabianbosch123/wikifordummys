@@ -4,7 +4,7 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type TreeNodeDto } from '@wiki/shared';
+import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
 import { ChangeEvent, ReactNode, useRef, useState } from 'react';
 import { errorMessage, uploadAttachment } from '@/lib/api';
@@ -22,8 +22,20 @@ export const editorExtensions = [
       HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: null },
     },
   }),
-  TableKit.configure({ table: { resizable: false } }),
-  Image.configure({ inline: false, allowBase64: false }),
+  // Spaltenbreiten per Ziehen am Spaltenrand; gespeichert als colwidth der Zellen (S6)
+  TableKit.configure({ table: { resizable: true, cellMinWidth: COLUMN_WIDTH.min, lastColumnResizable: true } }),
+  // Bildgröße per Ziehen an den Anfassern; gespeichert als width/height in Pixeln (S6)
+  Image.configure({
+    inline: false,
+    allowBase64: false,
+    resize: {
+      enabled: true,
+      directions: ['left', 'right', 'bottom-left', 'bottom-right'],
+      minWidth: IMAGE_SIZE.min,
+      minHeight: IMAGE_SIZE.min,
+      alwaysPreserveAspectRatio: true,
+    },
+  }),
   Callout,
 ];
 

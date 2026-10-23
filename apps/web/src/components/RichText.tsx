@@ -1,4 +1,4 @@
-import { isSafeImageSrc, isSafeLinkHref, type DocMark, type DocNode } from '@wiki/shared';
+import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, tableLayout, type DocMark, type DocNode } from '@wiki/shared';
 import { Fragment, ReactNode } from 'react';
 
 /**
@@ -51,6 +51,30 @@ function cellProps(node: DocNode) {
   return { colSpan: colSpan > 1 ? colSpan : undefined, rowSpan: rowSpan > 1 ? rowSpan : undefined };
 }
 
+/** Gespeicherte Bildgröße (Pixel); die Seitenbreite begrenzt sie weiterhin per CSS */
+function sizeAttr(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= IMAGE_SIZE.min && value <= IMAGE_SIZE.max ? value : undefined;
+}
+
+function renderTable(node: DocNode, key: number): ReactNode {
+  const layout = tableLayout(node);
+  const style = layout.width ? { width: layout.width } : layout.minWidth ? { minWidth: layout.minWidth } : undefined;
+  return (
+    <div key={key} className="table-wrap">
+      <table style={style}>
+        {layout.columns.length > 0 && (
+          <colgroup>
+            {layout.columns.map((w, i) => (
+              <col key={i} style={w ? { width: w } : { minWidth: COLUMN_WIDTH.min }} />
+            ))}
+          </colgroup>
+        )}
+        <tbody>{renderChildren(node)}</tbody>
+      </table>
+    </div>
+  );
+}
+
 function renderNode(node: DocNode, key: number): ReactNode {
   const children = () => renderChildren(node);
   switch (node.type) {
@@ -92,16 +116,21 @@ function renderNode(node: DocNode, key: number): ReactNode {
       if (!isSafeImageSrc(src)) return null;
       const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : '';
       const title = typeof node.attrs?.title === 'string' ? node.attrs.title : undefined;
-      return <img key={key} src={src} alt={alt} title={title} loading="lazy" referrerPolicy="no-referrer" />;
+      return (
+        <img
+          key={key}
+          src={src}
+          alt={alt}
+          title={title}
+          width={sizeAttr(node.attrs?.width)}
+          height={sizeAttr(node.attrs?.height)}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      );
     }
     case 'table':
-      return (
-        <div key={key} className="table-wrap">
-          <table>
-            <tbody>{children()}</tbody>
-          </table>
-        </div>
-      );
+      return renderTable(node, key);
     case 'tableRow':
       return <tr key={key}>{children()}</tr>;
     case 'tableHeader':

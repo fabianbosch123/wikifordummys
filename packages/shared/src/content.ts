@@ -203,6 +203,34 @@ export function sanitizeDoc(input: unknown): DocNode {
   return doc;
 }
 
+export interface TableLayout {
+  /** Breite je Spalte in Pixeln, null = automatisch */
+  columns: (number | null)[];
+  /** Feste Tabellenbreite, wenn alle Spalten eine Breite haben */
+  width?: number;
+  /** Sonst Mindestbreite der Tabelle (automatische Spalten mit Mindestbreite gerechnet) */
+  minWidth?: number;
+}
+
+/**
+ * Spaltenbreiten einer Tabelle aus der ersten Zeile, wie sie der Editor beim Ziehen speichert.
+ * Rechnet wie TipTap, damit die Ansicht der Seite dem Editor entspricht.
+ */
+export function tableLayout(table: DocNode, cellMinWidth: number = COLUMN_WIDTH.min): TableLayout {
+  const columns: (number | null)[] = [];
+  for (const cell of table.content?.[0]?.content ?? []) {
+    const colspan = Number(cell.attrs?.colspan ?? 1);
+    const widths = Array.isArray(cell.attrs?.colwidth) ? (cell.attrs.colwidth as unknown[]) : [];
+    for (let i = 0; i < colspan && columns.length < 1000; i++) {
+      const w = widths[i];
+      columns.push(typeof w === 'number' && w > 0 ? Math.max(w, cellMinWidth) : null);
+    }
+  }
+  if (columns.length === 0) return { columns };
+  const total = columns.reduce<number>((sum, w) => sum + (w ?? cellMinWidth), 0);
+  return columns.every((w) => w !== null) ? { columns, width: total } : { columns, minWidth: total };
+}
+
 export const EMPTY_DOC: DocNode = { type: 'doc', content: [{ type: 'paragraph' }] };
 
 function inlineText(node: DocNode): string {
