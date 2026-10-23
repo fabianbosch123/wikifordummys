@@ -7,12 +7,23 @@ export const PASSWORD = 'ein-sehr-sicheres-passwort';
 export const run = Date.now().toString(36);
 
 export function createAdminViaCli(email: string): string {
-  const out = execFileSync('node', ['../apps/api/dist/cli.js', 'create-admin', '--email', email, '--name', 'Erste Admin'], {
+  const out = execFileSync('node', ['../apps/api/dist/cli.js', 'create-admin', '--email', email, '--name', 'Erste Admin', '--invite'], {
     env: { ...process.env, ...e2eEnv },
     encoding: 'utf8',
   });
   const match = out.match(/(http:\/\/\S+\/invite\/\S+)/);
   if (!match) throw new Error(`Kein Einladungslink in: ${out}`);
+  return match[1];
+}
+
+/** Legt einen Admin mit Startpasswort an und liest das Passwort aus der Ausgabe */
+export function createAdminWithPassword(email: string): string {
+  const out = execFileSync('node', ['../apps/api/dist/cli.js', 'create-admin', '--email', email, '--name', 'Shell Admin'], {
+    env: { ...process.env, ...e2eEnv },
+    encoding: 'utf8',
+  });
+  const match = out.match(/^ {2}Passwort: +(\S+)$/m);
+  if (!match) throw new Error(`Kein Startpasswort in: ${out}`);
   return match[1];
 }
 

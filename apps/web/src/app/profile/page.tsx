@@ -37,7 +37,7 @@ function ProfileForm({ user }: { user: MeDto }) {
   );
 }
 
-function PasswordForm({ user, onChanged }: { user: MeDto; onChanged: () => void }) {
+function PasswordForm({ user, onChanged }: { user: MeDto; onChanged: () => Promise<void> | void }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -54,7 +54,7 @@ function PasswordForm({ user, onChanged }: { user: MeDto; onChanged: () => void 
       setNext('');
       setRepeat('');
       setMsg({ kind: 'success', text: 'Passwort geändert. Alle anderen Geräte wurden abgemeldet.' });
-      onChanged();
+      await onChanged();
     } catch (err) {
       setMsg({ kind: 'error', text: errorMessage(err) });
     }
@@ -63,7 +63,7 @@ function PasswordForm({ user, onChanged }: { user: MeDto; onChanged: () => void 
   return (
     <Card title="Passwort ändern">
       <form onSubmit={submit}>
-        <Field label="Aktuelles Passwort" type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
+        <Field label={user.mustChangePassword ? 'Startpasswort' : 'Aktuelles Passwort'} type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} />
         <Field label="Neues Passwort" type="password" autoComplete="new-password" required value={next} onChange={(e) => setNext(e.target.value)} />
         <Field label="Neues Passwort wiederholen" type="password" autoComplete="new-password" required value={repeat} onChange={(e) => setRepeat(e.target.value)} />
         {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
@@ -174,18 +174,35 @@ function RecoveryCodesCard() {
 }
 
 export default function ProfilePage() {
+  const { refresh } = useAuth();
   const [reloadKey, setReloadKey] = useState(0);
   return (
     <RequireAuth>
-      {(user) => (
-        <>
-          <h1>Mein Konto</h1>
-          <ProfileForm user={user} />
-          <PasswordForm user={user} onChanged={() => setReloadKey((k) => k + 1)} />
-          <Sessions reloadKey={reloadKey} />
-          <RecoveryCodesCard />
-        </>
-      )}
+      {(user) =>
+        user.mustChangePassword ? (
+          <>
+            <h1>Neues Passwort festlegen</h1>
+            <Alert kind="info">
+              Du bist mit einem Startpasswort aus der Kommandozeile angemeldet. Bitte lege jetzt ein eigenes Passwort fest; vorher ist das
+              Wiki nicht nutzbar.
+            </Alert>
+            <PasswordForm
+              user={user}
+              onChanged={async () => {
+                await refresh();
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <h1>Mein Konto</h1>
+            <ProfileForm user={user} />
+            <PasswordForm user={user} onChanged={() => setReloadKey((k) => k + 1)} />
+            <Sessions reloadKey={reloadKey} />
+            <RecoveryCodesCard />
+          </>
+        )
+      }
     </RequireAuth>
   );
 }

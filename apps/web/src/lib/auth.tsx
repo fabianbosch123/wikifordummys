@@ -61,10 +61,14 @@ export function RequireAuth({ admin, children }: { admin?: boolean; children: (u
       // Nach der Anmeldung zurück zur ursprünglich aufgerufenen Seite
       const keepNext = pathname !== '/' && target !== '/setup-2fa';
       router.replace(keepNext ? `${target}?next=${encodeURIComponent(pathname)}` : target);
+    } else if (state.user?.mustChangePassword && pathname !== '/profile') {
+      // Startpasswort aus der Kommandozeile: erst ändern, dann weiter
+      router.replace('/profile');
     }
   }, [state, router, pathname]);
 
   if (!state || !state.authenticated || !state.user) return <p className="muted">Lade …</p>;
+  if (state.user.mustChangePassword && pathname !== '/profile') return <p className="muted">Lade …</p>;
   if (admin && !state.user.isAdmin) return <p className="alert error">Dieser Bereich ist Administratoren vorbehalten.</p>;
   return <>{children(state.user)}</>;
 }

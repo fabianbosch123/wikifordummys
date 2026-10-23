@@ -21,7 +21,11 @@ Betrieb
   reconfigure             Installer erneut ausführen (Domain, SMTP, Sicherung … ändern)
 
 Benutzer und Mail
-  create-admin --email <adresse> --name "<name>"   weiteren Administrator anlegen
+  create-admin --email <adresse> --name "<name>" [--invite]
+                          weiteren Administrator anlegen; zeigt ein Startpasswort an
+                          (mit --invite stattdessen Einladungslink per Mail)
+  reset-password --email <adresse>                 neues Startpasswort setzen und anzeigen
+                          (z. B. wenn der Mailversand nicht funktioniert)
   mail-test [--to <adresse>]                        Mailversand prüfen
 
 Sicherung (restic, Ziel aus .env)
@@ -390,6 +394,7 @@ main() {
     update) cmd_update "$@" ;;
     reconfigure) exec "$WIKI_DIR/install.sh" "$@" ;;
     create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
+    reset-password) need_env && compose exec -T api node dist/cli.js reset-password "$@" ;;
     mail-test) need_env && compose exec -T api node dist/cli.js mail-test "$@" ;;
     backup) cmd_backup ;;
     backup-init) cmd_backup_init ;;

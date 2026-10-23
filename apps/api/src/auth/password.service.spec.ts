@@ -21,6 +21,14 @@ describe('Passwörter (S1)', () => {
     expect(checkPasswordPolicy('anna@example.de', 'anna@example.de')).toMatch(/E-Mail/);
   });
 
+  it('erzeugt lesbare, zufällige Startpasswörter, die die Richtlinie erfüllen', () => {
+    const a = service.generate();
+    expect(a).toMatch(/^[a-zA-Z2-9]{5}(-[a-zA-Z2-9]{5}){3}$/);
+    expect(a).not.toMatch(/[01lIO]/);
+    expect(checkPasswordPolicy(a)).toBeNull();
+    expect(service.generate()).not.toBe(a);
+  });
+
   it('wirft bei schwachem Passwort einen 400-Fehler', () => {
     expect(() => service.assertPolicy('zu-kurz')).toThrow();
   });

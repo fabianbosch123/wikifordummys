@@ -14,7 +14,8 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Wiederherstellung | `sudo wikictl restore <id\|latest>` | |
 | Health-Check mit Push | `sudo wikictl monitor` | alle 5 Minuten (`wikifordummys-monitor.timer`) |
 | Mailversand prüfen | `sudo wikictl mail-test --to ich@firma.de` | |
-| Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | |
+| Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | zeigt ein Startpasswort an; `--invite` für Einladungslink per Mail |
+| Passwort zurücksetzen ohne Mail | `sudo wikictl reset-password --email …` | neues Startpasswort, alle Sitzungen enden, 2FA bleibt |
 | Einstellungen ändern | `sudo wikictl reconfigure` (startet den Installer) | |
 
 Timer ansehen: `systemctl list-timers 'wikifordummys-*'`, letzte Läufe: `journalctl -u wikifordummys-backup.service`.

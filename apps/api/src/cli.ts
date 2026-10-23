@@ -9,10 +9,16 @@ import { MailService } from './mail/mail.service';
 import { PrismaService } from './infra/prisma.service';
 
 const USAGE = `Verwendung:
-  node dist/cli.js create-admin --email <adresse> --name "<Anzeigename>"
-      Legt einen Administrator an und gibt einen Einladungslink aus (72 Stunden gültig).
-      Über den Link setzt die Person ihr Passwort und richtet die Zwei-Faktor-Anmeldung ein.
-      Es gibt kein Standard-Passwort.
+  node dist/cli.js create-admin --email <adresse> --name "<Anzeigename>" [--invite]
+      Legt einen Administrator an und zeigt ein zufälliges Startpasswort in der Shell an.
+      Funktioniert ohne Mailversand. Nach der ersten Anmeldung müssen das Passwort
+      geändert und die Zwei-Faktor-Anmeldung eingerichtet werden.
+      Mit --invite stattdessen per Einladungslink (72 Stunden gültig, auch per Mail).
+
+  node dist/cli.js reset-password --email <adresse>
+      Setzt für ein bestehendes Konto ein neues Startpasswort und zeigt es an, z. B. wenn
+      der Mailversand nicht funktioniert. Beendet alle Sitzungen; die 2FA bleibt bestehen.
+      Ein noch eingeladenes Konto wird dabei aktiviert.
 
   node dist/cli.js mail-test [--to <adresse>] [--verify-only]
       Prüft den Mailversand mit den gültigen Einstellungen (Administration vor .env)
@@ -23,7 +29,15 @@ function arg(args: string[], name: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
-export async function createAdmin(email: string, displayName: string) {
+export interface CreatedAdmin {
+  loginUrl: string;
+  /** Startpasswort (ohne --invite) */
+  password?: string;
+  /** Einladungslink (mit --invite) */
+  inviteUrl?: string;
+}
+
+export async function createAdmin(email: string, displayName: string, opts: { invite?: boolean } = {}): Promise<CreatedAdmin> {
   const config = loadConfig();
   const ctx = await NestFactory.createApplicationContext(AppModule.forRoot(config), { logger: ['error'] });
   try {
@@ -32,7 +46,7 @@ export async function createAdmin(email: string, displayName: string) {
     const audit = ctx.get(AuditService);
     const normalized = email.trim().toLowerCase();
     if (await prisma.user.findUnique({ where: { email: normalized } })) {
-      throw new Error(`Es gibt bereits ein Konto mit ${normalized}.`);
+      throw new Error(`Es gibt bereits ein Konto mit ${normalized}. Neues Passwort mit: reset-password --email ${normalized}`);
     }
     const adminGroup = await prisma.group.findUniqueOrThrow({ where: { name: SYSTEM_GROUPS.ADMINS } });
     const user = await prisma.user.create({
@@ -43,12 +57,40 @@ export async function createAdmin(email: string, displayName: string) {
         groups: { create: [{ groupId: adminGroup.id }] },
       },
     });
-    const url = await auth.createInvitation(user, null);
     await audit.log({ action: 'cli.admin.created', targetType: 'user', targetId: user.id, details: { email: normalized } });
-    return url;
+    const loginUrl = `${config.APP_ORIGIN}/login`;
+    if (opts.invite) return { loginUrl, inviteUrl: await auth.createInvitation(user, null) };
+    return { loginUrl, password: await auth.issueStartPassword(user.id) };
   } finally {
     await ctx.close();
   }
+}
+
+export async function resetPassword(email: string): Promise<CreatedAdmin> {
+  const config = loadConfig();
+  const ctx = await NestFactory.createApplicationContext(AppModule.forRoot(config), { logger: ['error'] });
+  try {
+    const prisma = ctx.get(PrismaService);
+    const normalized = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalized } });
+    if (!user) throw new Error(`Es gibt kein Konto mit ${normalized}.`);
+    const password = await ctx.get(AuthService).issueStartPassword(user.id);
+    return { loginUrl: `${config.APP_ORIGIN}/login`, password };
+  } finally {
+    await ctx.close();
+  }
+}
+
+function printStartPassword(title: string, email: string, result: CreatedAdmin) {
+  console.log(`${title}
+
+  Anmeldung: ${result.loginUrl}
+  E-Mail:    ${email}
+  Passwort:  ${result.password}
+
+Das Passwort wird nur jetzt angezeigt. Bei der Anmeldung wird, falls noch nicht geschehen,
+die Zwei-Faktor-Anmeldung eingerichtet; danach muss das Passwort geändert werden.
+`);
 }
 
 /** Gibt eine Beschreibung des geprüften Zugangs zurück; wirft bei Fehlern mit verständlicher Meldung */
@@ -82,18 +124,22 @@ async function main() {
     console.log(await mailTest(args.includes('--verify-only') ? undefined : arg(args, 'to')));
     return;
   }
-  if (command !== 'create-admin') {
+  const email = arg(args, 'email')?.trim().toLowerCase();
+  if (command === 'reset-password' && email) {
+    printStartPassword('Neues Startpasswort gesetzt.', email, await resetPassword(email));
+    return;
+  }
+  const name = arg(args, 'name');
+  if (command !== 'create-admin' || !email || !name) {
     console.log(USAGE);
     process.exit(command ? 1 : 0);
   }
-  const email = arg(args, 'email');
-  const name = arg(args, 'name');
-  if (!email || !name) {
-    console.log(USAGE);
-    process.exit(1);
+  const result = await createAdmin(email, name, { invite: args.includes('--invite') });
+  if (result.inviteUrl) {
+    console.log(`Administrator angelegt. Einladungslink (72 Stunden gültig):\n\n  ${result.inviteUrl}\n`);
+  } else {
+    printStartPassword('Administrator angelegt.', email, result);
   }
-  const url = await createAdmin(email, name);
-  console.log(`Administrator angelegt. Einladungslink (72 Stunden gültig):\n\n  ${url}\n`);
 }
 
 if (require.main === module) {

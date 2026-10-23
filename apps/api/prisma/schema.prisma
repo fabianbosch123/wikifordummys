@@ -34,6 +34,8 @@ model User {
   totpEnabled  Boolean    @default(false) @map("totp_enabled")
   /// Zuletzt verwendeter TOTP-Zeitschritt, damit ein Code nur einmal gilt (S2)
   totpLastStep Int?       @map("totp_last_step")
+  /// Startpasswort aus der Kommandozeile: muss nach der Anmeldung geändert werden
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   status       UserStatus @default(invited)
   failedLogins Int        @default(0) @map("failed_logins")
   lockedUntil  DateTime?  @map("locked_until")

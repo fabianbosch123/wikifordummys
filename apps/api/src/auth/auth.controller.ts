@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import { APP_CONFIG, AppConfig } from '../config';
 import { AuditService } from '../audit/audit.service';
 import { clearSessionCookie, setCsrfCookie, setSessionCookie } from '../common/cookies';
-import { AllowStages, Auth, Public } from '../common/decorators';
+import { AllowPendingPasswordChange, AllowStages, Auth, Public } from '../common/decorators';
 import { AuthContext, clientIp, meDto, userAgent, WikiRequest } from '../common/request-context';
 import { CryptoService } from '../infra/crypto.service';
 import { AuthService, ClientInfo } from './auth.service';
@@ -88,6 +88,7 @@ export class AuthController {
   }
 
   @AllowStages('password', 'totp_setup', 'full')
+  @AllowPendingPasswordChange()
   @Post('logout')
   @HttpCode(204)
   async logout(@Auth() ctx: AuthContext, @Req() req: WikiRequest, @Res({ passthrough: true }) res: Response) {
