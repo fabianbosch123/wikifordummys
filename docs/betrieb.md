@@ -17,6 +17,7 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | zeigt ein Startpasswort an; `--invite` für Einladungslink per Mail |
 | Passwort zurücksetzen ohne Mail | `sudo wikictl reset-password --email …` | neues Startpasswort, alle Sitzungen enden, 2FA bleibt |
 | Einstellungen ändern | `sudo wikictl reconfigure` (startet den Installer) | |
+| Platz schaffen | `sudo wikictl cleanup` | Build-Cache, unbenutzte Images, Journal; Volumes und Sicherungen bleiben |
 | Office-Editor an/aus, prüfen | `sudo wikictl office on\|off`, `sudo wikictl office-check` | |
 
 Timer ansehen: `systemctl list-timers 'wikifordummys-*'`, letzte Läufe: `journalctl -u wikifordummys-backup.service`.
@@ -41,7 +42,7 @@ sudo wikictl update            # neuester Stand des aktuellen Branches
 sudo wikictl update v0.4.0     # bestimmter Tag oder Commit
 ```
 
-Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor) fragt es einmal ab. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
+Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor) fragt es einmal ab. Vorher prüft es den freien Platz (4 GB, mit Office-Editor 6 GB) und räumt bei Bedarf den Docker-Build-Cache auf; danach entfernt es Build-Cache älter als 24 Stunden und abgelöste Images. Von den Datenbank-Sicherungen in `/var/backups/wikifordummys/` bleiben die letzten fünf. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
 
 Ubuntu-Sicherheitsupdates laufen automatisch (unattended-upgrades), sofern im Installer gewählt. Docker-Basis-Images werden bei `wikictl update` mit `--pull` aktualisiert.
 
@@ -100,7 +101,7 @@ Vorher sichert `wikictl` den aktuellen Stand (Markierung `vor-wiederherstellung`
 ## Überwachung
 
 - **Health-Endpunkt** `https://<domain>/api/v1/health` liefert `{"status":"ok","checks":{"database":"ok","redis":"ok","disk":"ok"}}` bzw. HTTP 503. Für Uptime Kuma, UptimeRobot, Zabbix o. ä. als HTTP-Monitor mit Stichwort `"status":"ok"` eintragen. `disk` wird `knapp`, wenn weniger als 10 % frei sind.
-- **Push** `MONITOR_PING_URL`: alle 5 Minuten ruft `wikictl monitor` die Adresse auf, solange das Wiki gesund ist (bei Fehlern `…/fail`). Damit fällt auch ein komplett ausgefallener Server auf.
+- **Push** `MONITOR_PING_URL`: alle 5 Minuten ruft `wikictl monitor` die Adresse auf, solange das Wiki gesund ist (bei Fehlern `…/fail`). Unter 1 GB freiem Platz meldet es ebenfalls `…/fail`. Damit fällt auch ein komplett ausgefallener Server auf.
 - **Container-Healthchecks**: `sudo wikictl status` bzw. `docker compose ps` zeigt `healthy` für API und Weboberfläche.
 - **Zertifikat**: `wikictl status` zeigt Ablaufdatum und Aussteller. Caddy erneuert selbst; ein Ablaufdatum in weniger als 20 Tagen deutet auf ein Problem (DNS, Port 80/443) hin.
 - **Sicherung**: `wikictl status` zeigt den letzten Stand; dazu `BACKUP_PING_URL`.
@@ -124,3 +125,16 @@ sudo fail2ban-client set wikifordummys unbanip 203.0.113.7
 - `.env` enthält alle Schlüssel und ist nur für root lesbar. Nicht ins Repository, nicht per Mail.
 - Den Admin-Bereich bei Bedarf zusätzlich auf bestimmte IPs beschränken (im vorgeschalteten Proxy oder per VPN).
 - Nach dem Zurücksetzen der 2FA einer Person deren Identität prüfen (z. B. telefonisch).
+
+## Platte voll
+
+Läuft die Platte voll, startet die Datenbank nicht mehr: `docker compose ps` zeigt `db` als `Restarting (1)`, und `sudo docker compose logs db` meldet `could not write lock file "postmaster.pid": No space left on device`. Die Daten sind dabei nicht beschädigt.
+
+```bash
+df -h /
+sudo docker system df
+sudo wikictl cleanup        # Build-Cache, unbenutzte Images, Journal; startet die Dienste danach wieder
+sudo wikictl status
+```
+
+Niemals `docker volume prune` oder `docker system prune --volumes` verwenden: Das löscht Datenbank und Anhänge.
