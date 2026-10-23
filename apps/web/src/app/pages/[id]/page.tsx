@@ -164,8 +164,10 @@ function PageView() {
               }}
             />
           )}
-          <RichText doc={p.content} />
-          <Attachments pageId={p.id} canEdit={p.canEdit} />
+          <div className="page-body">
+            <RichText doc={p.content} />
+            <Attachments pageId={p.id} canEdit={p.canEdit} />
+          </div>
         </article>
       )}
     </SpaceLayout>

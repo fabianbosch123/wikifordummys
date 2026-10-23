@@ -287,12 +287,29 @@ label.check input { width: auto; margin-top: 3px; }
 .subject-list li { display: flex; gap: 4px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
 .subject-list button { padding: 0 6px; font-size: 13px; }
 
-.attachments { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16px; }
-.attachment-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
-.attachment-list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.attachment-list img { width: 64px; height: 48px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; }
-.attachment-list .file-icon { width: 64px; height: 48px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--muted); }
-.attachment-list .name { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+.page-body { display: flex; gap: clamp(16px, 2vw, 32px); align-items: flex-start; }
+.page-body > .rich { flex: 1; min-width: 0; }
+/* Anhänge rechts als aufklappbares Panel; zugeklappt nur die Kopfzeile, der Inhalt bekommt den Rest */
+.attachments { flex: none; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
+.attachments:has(details[open]) { width: clamp(260px, 24%, 380px); }
+.attachments summary { cursor: pointer; display: flex; align-items: center; gap: 6px; list-style: none; }
+.attachments summary::-webkit-details-marker { display: none; }
+.attachments summary::before { content: ''; border: 5px solid transparent; border-left: 7px solid var(--muted); border-right-width: 0; transition: transform .1s; }
+.attachments details[open] > summary::before { transform: rotate(90deg); }
+.attachments summary h2 { font-size: 15px; margin: 0; white-space: nowrap; }
+.attachments summary .count { color: var(--muted); font-weight: normal; }
+.attachments details[open] > summary { margin-bottom: 10px; }
+.attachments > details > p.row { margin-bottom: 0; }
+@media (max-width: 1000px) {
+  .page-body { flex-direction: column; align-items: stretch; }
+  .attachments, .attachments:has(details[open]) { width: auto; position: static; max-height: none; }
+}
+.attachment-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 12px; }
+.attachment-list li { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.attachment-list img { width: 56px; height: 42px; object-fit: cover; border: 1px solid var(--border); border-radius: 4px; flex: none; }
+.attachment-list .file-icon { width: 56px; height: 42px; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--muted); }
+.attachment-list .name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.attachment-list .actions { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
 .attachment-versions summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .attachment-versions ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
 
