@@ -2,7 +2,7 @@
 # wikifordummys: Installation und Neukonfiguration auf Ubuntu 22.04/24.04 (VPS oder eigener Server).
 #
 # Fragt Domain, Betriebsart (Let's Encrypt, nur internes Netz, hinter vorhandenem Proxy), Mailversand,
-# ersten Administrator und Sicherung ab, schreibt .env, startet das Wiki mit Docker Compose,
+# ersten Administrator, Office-Editor und Sicherung ab, schreibt .env, startet das Wiki mit Docker Compose,
 # prüft den Mailversand und richtet wikictl, Sicherung und Überwachung ein.
 # Erneut aufgerufen ändert es die Konfiguration; Schlüssel und Passwörter bleiben dabei erhalten.
 #
@@ -179,6 +179,7 @@ load_existing() {
   CUR_S3_KEY=$(env_get BACKUP_S3_ACCESS_KEY_ID)
   CUR_S3_SECRET=$(env_get BACKUP_S3_SECRET_ACCESS_KEY)
   CUR_MONITOR=$(env_get MONITOR_PING_URL)
+  CUR_OFFICE=$(env_get WIKI_OFFICE)
   CUR_BACKUP_PING=$(env_get BACKUP_PING_URL)
 
   # Bisherigen SMTP-Zugang zerlegen: smtp[s]://benutzer:passwort@server:port[?tls=off]
@@ -351,6 +352,22 @@ ask_admin() {
   ask ADMIN_NAME "Anzeigename" "${ADMIN_NAME:-Administrator}" valid_from_name "Bitte einen Namen ohne < > \" angeben."
 }
 
+ask_office() {
+  step "Office-Editor"
+  info "Mit Euro-Office lassen sich Word-, Excel- und PowerPoint-Anhänge (auch OpenDocument) direkt im Wiki"
+  info "ansehen und gemeinsam bearbeiten; jedes Speichern legt eine neue Fassung des Anhangs an."
+  info "Der Editor läuft als zusätzlicher Container unter https://$WIKI_DOMAIN/office/ und braucht etwa 4 GB Arbeitsspeicher mehr."
+  local default=j mem_kb
+  if [[ $CUR_OFFICE == false ]]; then default=n; fi
+  mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  if ((mem_kb > 0 && mem_kb < 7000000)); then
+    warn "Dieser Server hat $((mem_kb / 1024 / 1024)) GB Arbeitsspeicher; für Wiki und Editor sind 8 GB empfohlen."
+    if [[ -z $CUR_OFFICE ]]; then default=n; fi
+  fi
+  ask_yes OFFICE_ENABLE "Office-Editor einrichten?" "$default"
+  if ((OFFICE_ENABLE)); then WIKI_OFFICE=true; else WIKI_OFFICE=false; fi
+}
+
 ask_backup() {
   step "Sicherung"
   info "Nächtliche, verschlüsselte Sicherung von Datenbank, Anhängen, Zertifikaten und .env mit restic"
@@ -470,6 +487,7 @@ summary() {
     info "  Mailversand:    aus"
   fi
   if ((ADMIN_CREATE)); then info "  Administrator:  $ADMIN_NAME <$ADMIN_EMAIL>"; fi
+  if [[ $WIKI_OFFICE == true ]]; then info "  Office-Editor:  an (https://$WIKI_DOMAIN/office/)"; else info "  Office-Editor:  aus"; fi
   if [[ -n $BACKUP_REPOSITORY ]]; then info "  Sicherung:      $BACKUP_REPOSITORY"; else info "  Sicherung:      aus"; fi
   if [[ -n $MONITOR_PING_URL ]]; then info "  Überwachung:    $MONITOR_PING_URL"; fi
   if ((!NONINTERACTIVE)); then
@@ -494,11 +512,12 @@ write_env() {
   chmod 600 "$ENV_FILE"
   local key
   # Geheimnisse nur erzeugen, wenn sie fehlen: ein neuer ENCRYPTION_KEY würde alle 2FA-Einrichtungen ungültig machen
-  for key in DB_PASSWORD REDIS_PASSWORD ENCRYPTION_KEY SESSION_SECRET; do
+  for key in DB_PASSWORD REDIS_PASSWORD ENCRYPTION_KEY SESSION_SECRET OFFICE_JWT_SECRET; do
     is_secret "$(env_get "$key")" || env_set "$key" "$(gen_secret)"
   done
   env_set WIKI_DOMAIN "$WIKI_DOMAIN"
   env_set WIKI_TLS "$WIKI_TLS"
+  env_set WIKI_OFFICE "$WIKI_OFFICE"
   env_set SMTP_URL "$SMTP_URL"
   env_set MAIL_FROM "$MAIL_FROM"
   local pair
@@ -584,6 +603,10 @@ start_stack() {
     info "Baue die Images aus dem Quellcode (beim ersten Mal einige Minuten) …"
     compose build --pull
   fi
+  if [[ $WIKI_OFFICE != true ]]; then
+    # Abgeschalteter Editor: Container entfernen; das Profil muss dafür ausdrücklich genannt werden
+    compose --profile office rm -sf office >/dev/null 2>&1 || true
+  fi
   compose up -d --remove-orphans
   info "Warte auf die API (Datenbankmigrationen laufen beim Start) …"
   if ! wait_healthy 300; then
@@ -593,6 +616,23 @@ start_stack() {
   fi
   ok "API läuft."
   check_through_caddy
+  check_office
+}
+
+# Der Editor braucht beim ersten Start einige Minuten (Schriften, interne Datenbank)
+check_office() {
+  [[ $WIKI_OFFICE == true ]] || return 0
+  info "Warte auf den Office-Editor (beim ersten Start einige Minuten) …"
+  local i state
+  for i in $(seq 1 60); do
+    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q office 2>/dev/null)" 2>/dev/null || true)
+    if [[ $state == healthy ]]; then
+      ok "Office-Editor läuft."
+      return 0
+    fi
+    sleep 5
+  done
+  warn "Der Office-Editor ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs office"
 }
 
 check_through_caddy() {
@@ -794,6 +834,7 @@ main() {
   ask_proxy
   ask_smtp
   ask_admin
+  ask_office
   ask_backup
   ask_monitoring
   ask_system

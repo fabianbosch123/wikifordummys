@@ -30,6 +30,14 @@ const schema = z
     ATTACHMENTS_DIR: z.string().min(1).default('/var/lib/wiki/attachments'),
     /** Höchstgröße eines Anhangs in MiB (S7) */
     ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(1024).default(50),
+    /** Office-Editor (Euro-Office) zum Ansehen und Bearbeiten von Office-Anhängen */
+    OFFICE_ENABLED: bool.default('false'),
+    /** Gemeinsames JWT-Geheimnis mit dem Editor-Server, mindestens 32 Zeichen */
+    OFFICE_JWT_SECRET: z.string().optional(),
+    /** Adresse des Editor-Servers im internen Docker-Netz; von dort holt die API gespeicherte Fassungen */
+    OFFICE_INTERNAL_URL: z.string().url().default('http://office'),
+    /** Adresse, unter der der Editor-Server die API erreicht (Datei abholen, Rückruf nach dem Speichern) */
+    OFFICE_API_URL: z.string().url().default('http://api:3001'),
     /** Argon2-Kosten; nur in Tests herabsetzen */
     ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(65536),
     ARGON2_TIME_COST: z.coerce.number().int().min(1).default(3),
@@ -37,6 +45,9 @@ const schema = z
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && !env.COOKIE_SECURE) {
       ctx.addIssue({ code: 'custom', path: ['COOKIE_SECURE'], message: 'muss in Produktion true sein' });
+    }
+    if (env.OFFICE_ENABLED && (env.OFFICE_JWT_SECRET ?? '').length < 32) {
+      ctx.addIssue({ code: 'custom', path: ['OFFICE_JWT_SECRET'], message: 'mindestens 32 Zeichen, wenn OFFICE_ENABLED gesetzt ist' });
     }
     if (env.NODE_ENV === 'production' && !env.APP_ORIGIN.startsWith('https://')) {
       ctx.addIssue({ code: 'custom', path: ['APP_ORIGIN'], message: 'muss in Produktion mit https:// beginnen' });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { mkdir, open as openFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -76,6 +76,18 @@ export class AttachmentStorageService {
 
   open(storageKey: string): ReadStream {
     return createReadStream(this.pathOf(storageKey));
+  }
+
+  /** Liest die ersten Bytes einer Datei, z. B. zur Typprüfung */
+  async readHead(storageKey: string, bytes: number): Promise<Buffer> {
+    const file = await openFile(this.pathOf(storageKey), 'r');
+    try {
+      const buffer = Buffer.alloc(bytes);
+      const { bytesRead } = await file.read(buffer, 0, bytes, 0);
+      return buffer.subarray(0, bytesRead);
+    } finally {
+      await file.close();
+    }
   }
 
   /** Löscht Dateien; fehlende Dateien sind kein Fehler */

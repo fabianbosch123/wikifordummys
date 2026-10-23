@@ -94,13 +94,18 @@ jobs:
             image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress wikifordummys-${{ matrix.app }}:ci
 
   # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung
-  # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz
+  # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
+  # In der Betriebsart internal läuft zusätzlich der Office-Editor (echtes Euro-Office-Image).
   install:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        mode: [internal, proxy]
+        include:
+          - mode: internal
+            office: j
+          - mode: proxy
+            office: n
     steps:
       - uses: actions/checkout@v4
       - name: Shellcheck
@@ -108,7 +113,7 @@ jobs:
       - name: Installation (ohne Rückfragen)
         run: |
           sudo WIKI_TLS=${{ matrix.mode }} WIKI_DOMAIN=wiki.localtest PROXY_SAME_HOST=j \
-            SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI \
+            SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI OFFICE_ENABLE=${{ matrix.office }} \
             BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic \
             INSTALL_UNATTENDED=n INSTALL_UFW=n INSTALL_FAIL2BAN=n \
             ./install.sh --non-interactive
@@ -133,6 +138,29 @@ jobs:
           else
             curl -fsS -k --resolve wiki.localtest:443:127.0.0.1 https://wiki.localtest/api/v1/health
           fi
+      - name: Office-Editor über Caddy und im internen Netz
+        if: matrix.office == 'j'
+        run: |
+          base=https://wiki.localtest
+          opts=(-k --resolve wiki.localtest:443:127.0.0.1)
+          sudo wikictl status | tee status.txt
+          grep -q "Office-Editor bereit" status.txt
+          # Echter Durchlauf: Editor-Server holt eine Datei bei der API, wandelt sie um, die API holt das Ergebnis ab
+          sudo wikictl office-check
+          # Editor-Skript über Caddy, einbettbar nur im eigenen Wiki
+          curl -fsS "${opts[@]}" -o api.js -D headers.txt "$base/office/web-apps/apps/api/documents/api.js"
+          grep -q DocsAPI api.js
+          grep -qi '^x-frame-options: SAMEORIGIN' headers.txt
+          curl -fsS "${opts[@]}" "$base/office/healthcheck" | grep -q true
+          # Von außen gesperrt: interne Pfade des Editor-Servers und die Rückruf-Adressen der API
+          for path in /office/example/ /office/info/info.json /api/v1/office/callback /api/v1/office/files/x; do
+            code=$(curl -s "${opts[@]}" -o /dev/null -w '%{http_code}' "$base$path")
+            echo "$path → $code"
+            test "$code" = 404
+          done
+      - name: Ohne Office-Editor läuft kein Container office
+        if: matrix.office == 'n'
+        run: test -z "$(sudo docker compose --profile office ps -q office)"
       - name: OWASP ZAP Baseline-Scan
         if: matrix.mode == 'internal'
         run: |
