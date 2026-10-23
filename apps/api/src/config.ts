@@ -38,6 +38,8 @@ const schema = z
     OFFICE_INTERNAL_URL: z.string().url().default('http://office'),
     /** Adresse, unter der der Editor-Server die API erreicht (Datei abholen, Rückruf nach dem Speichern) */
     OFFICE_API_URL: z.string().url().default('http://api:3001'),
+    /** Zeichnungen mit draw.io (Dienst drawio unter /draw/); ohne bleiben vorhandene Zeichnungen sichtbar, aber nicht bearbeitbar */
+    DRAWIO_ENABLED: bool.default('false'),
     /** Argon2-Kosten; nur in Tests herabsetzen */
     ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(65536),
     ARGON2_TIME_COST: z.coerce.number().int().min(1).default(3),

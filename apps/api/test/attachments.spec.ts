@@ -160,3 +160,55 @@ describe('Anhänge hochladen und abrufen', () => {
     expect(res.body.content.content[0].attrs.src).toBe(a.url);
   });
 });
+
+describe('Zeichnungen: neue Fassungen und feste Fassungen auf Seiten', () => {
+  /** Ein anderes gültiges PNG: gleiche Signatur, anderer Inhalt */
+  const PNG2 = Buffer.concat([PNG, Buffer.from('zeichnung-2')]);
+
+  it('speichert eine neue Fassung, zeigt Fassungen mit inline=1 an und verweist von der Seite auf eine feste Fassung', async () => {
+    const a = (await anna.client.upload(pageId, 'Netz.drawio.png', PNG)).body as AttachmentDto;
+    const res = await anna.client.uploadVersion(a.id, PNG2);
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ id: a.id, version: 2, sizeBytes: PNG2.length, mimeType: 'image/png' });
+    // Gleicher Inhalt ergibt keine weitere Fassung
+    expect((await anna.client.uploadVersion(a.id, PNG2)).body).toMatchObject({ version: 2 });
+
+    const v1 = await raw(bernd.client, `/attachments/${a.id}/versions/1?inline=1`);
+    expect(v1.headers['content-type']).toBe('image/png');
+    expect(v1.headers['content-disposition']).toMatch(/^inline;/);
+    expect(Buffer.compare(v1.body as Buffer, PNG)).toBe(0);
+    // Ohne inline=1 bleibt es beim Herunterladen
+    expect((await raw(bernd.client, `/attachments/${a.id}/versions/1`)).headers['content-disposition']).toMatch(/^attachment;/);
+
+    const content = { type: 'doc', content: [{ type: 'drawing', attrs: { attachmentId: a.id, version: 1, title: 'Netz', text: 'Router' } }] };
+    const put = await anna.client.put(`/pages/${pageId}`, { title: 'Mit Zeichnung', content, version: 1 });
+    expect(put.status).toBe(200);
+    expect(put.body.content.content[0]).toEqual({ type: 'drawing', attrs: { attachmentId: a.id, version: 1, title: 'Netz', text: 'Router' } });
+    // Beschriftungen der Zeichnung sind über die Suche auffindbar
+    const hits = await bernd.client.get('/search?q=Router');
+    expect(hits.body.results).toEqual([expect.objectContaining({ id: pageId })]);
+  });
+
+  it('nur wer die Seite bearbeiten darf, speichert neue Fassungen; Leser sehen sie', async () => {
+    const a = (await anna.client.upload(pageId, 'Netz.drawio.png', PNG)).body as AttachmentDto;
+    await anna.client
+      .put('/spaces/IT/permissions', {
+        entries: [
+          { type: 'user', id: anna.userId, role: 'admin' },
+          { type: 'user', id: bernd.userId, role: 'viewer' },
+        ],
+      })
+      .then((r) => expect(r.status).toBe(200));
+    expect((await bernd.client.uploadVersion(a.id, PNG2)).status).toBe(403);
+    expect((await raw(bernd.client, `/attachments/${a.id}/versions/1?inline=1`)).status).toBe(200);
+    expect((await anna.client.uploadVersion(a.id, PNG2, 'application/json')).status).toBe(400);
+    expect((await anna.client.uploadVersion(a.id, Buffer.alloc(0))).status).toBe(400);
+    expect((await anna.client.uploadVersion('00000000-0000-4000-8000-000000000000', PNG2)).status).toBe(404);
+    expect(await ctx.prisma.attachmentVersion.count({ where: { attachmentId: a.id } })).toBe(1);
+    expect(readdirSync(join(dir, 'tmp'))).toEqual([]);
+  });
+
+  it('meldet eingeschaltete Dienste', async () => {
+    expect((await bernd.client.get('/features')).body).toEqual({ office: expect.any(Boolean), drawio: false });
+  });
+});

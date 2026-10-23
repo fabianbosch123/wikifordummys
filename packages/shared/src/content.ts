@@ -32,6 +32,23 @@ export const IMAGE_SIZE = { min: 16, max: 5_000 } as const;
 /** Grenzen für die im Editor gezogene Spaltenbreite von Tabellen (Pixel) */
 export const COLUMN_WIDTH = { min: 40, max: 5_000 } as const;
 
+/** Zeichnungen (draw.io): Länge der Beschriftungen für die Suche und des Titels */
+export const DRAWING_LIMITS = { maxText: 10_000, maxTitle: 200 } as const;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Bild einer Zeichnung: die PNG-Datei (mit eingebetteten draw.io-Daten) als Fassung eines Anhangs.
+ * Die Seite zeigt immer die Fassung, die beim Speichern der Seite aktuell war; ältere Seitenversionen
+ * zeigen so auch die damalige Zeichnung.
+ */
+export function drawingSrc(attrs: Record<string, unknown> | undefined): string | null {
+  const id = attrs?.attachmentId;
+  const version = attrs?.version;
+  if (typeof id !== 'string' || !UUID.test(id) || typeof version !== 'number' || !Number.isInteger(version) || version < 1) return null;
+  return `/api/v1/attachments/${id.toLowerCase()}/versions/${version}?inline=1`;
+}
+
 export class ContentError extends Error {}
 
 type AttrSanitizer = (attrs: Record<string, unknown>) => Record<string, unknown> | undefined;
@@ -122,6 +139,20 @@ const NODES: Record<string, AttrSanitizer | null> = {
     if (!isSafeImageSrc(a.src)) throw new ContentError('Bilder sind nur über https:// oder als Pfad im Wiki erlaubt.');
     return compact({ src: a.src, alt: str(a.alt, 500), title: str(a.title, 500), width: sizePx(a.width), height: sizePx(a.height) });
   },
+  drawing: (a) => {
+    if (typeof a.attachmentId !== 'string' || !UUID.test(a.attachmentId)) throw new ContentError('Zeichnung ohne gültigen Anhang.');
+    const version = intIn(a.version, 1, 1_000_000);
+    if (version === undefined) throw new ContentError('Zeichnung ohne gültige Fassung.');
+    const text = typeof a.text === 'string' ? a.text.slice(0, DRAWING_LIMITS.maxText) : undefined;
+    return compact({
+      attachmentId: a.attachmentId.toLowerCase(),
+      version,
+      title: str(a.title, DRAWING_LIMITS.maxTitle),
+      width: sizePx(a.width),
+      height: sizePx(a.height),
+      text: text || undefined,
+    });
+  },
   callout: (a) => {
     const variant = CALLOUT_VARIANTS.includes(a.variant as CalloutVariant) ? (a.variant as CalloutVariant) : 'info';
     return { variant };
@@ -168,6 +199,10 @@ export function sanitizeDoc(input: unknown): DocNode {
     if (sanitizeAttrs) {
       const attrs = sanitizeAttrs(isRecord(raw.attrs) ? raw.attrs : {});
       if (attrs) node.attrs = attrs;
+    }
+    if (type === 'drawing' && typeof node.attrs?.text === 'string') {
+      textLength += node.attrs.text.length;
+      if (textLength > CONTENT_LIMITS.maxTextLength) throw new ContentError('Das Dokument ist zu groß.');
     }
 
     if (type === 'text') {
@@ -237,6 +272,10 @@ function inlineText(node: DocNode): string {
   if (node.type === 'text') return node.text ?? '';
   if (node.type === 'hardBreak') return ' ';
   if (node.type === 'image') return `[Bild: ${String(node.attrs?.alt ?? node.attrs?.src ?? '')}]`;
+  if (node.type === 'drawing') {
+    const text = typeof node.attrs?.text === 'string' && node.attrs.text ? ` ${node.attrs.text.replace(/\s+/g, ' ')}` : '';
+    return `[Zeichnung: ${String(node.attrs?.title ?? '')}]${text}`;
+  }
   return (node.content ?? []).map(inlineText).join('');
 }
 
@@ -261,6 +300,7 @@ export function docToLines(doc: DocNode): string[] {
         lines.push(`${prefix}---`);
         return;
       case 'image':
+      case 'drawing':
         lines.push(prefix + inlineText(node));
         return;
       case 'tableRow':

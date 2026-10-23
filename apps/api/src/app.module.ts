@@ -19,6 +19,7 @@ import { AuthMiddleware } from './common/auth.middleware';
 import { CsrfMiddleware } from './common/csrf.middleware';
 import { DirectoryController } from './directory/directory.controller';
 import { APP_CONFIG, AppConfig } from './config';
+import { FeaturesController } from './features/features.controller';
 import { HealthController } from './health/health.controller';
 import { CryptoService } from './infra/crypto.service';
 import { PrismaService } from './infra/prisma.service';
@@ -54,6 +55,7 @@ export class AppModule implements NestModule {
         SearchController,
         DirectoryController,
         SettingsController,
+        FeaturesController,
         HealthController,
       ],
       providers: [

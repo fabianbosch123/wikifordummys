@@ -102,6 +102,11 @@ export class Client {
       .set('Content-Type', contentType)
       .send(data);
   }
+
+  /** Neue Fassung eines Anhangs hochladen (z. B. gespeicherte Zeichnung) */
+  uploadVersion(attachmentId: string, data: Buffer, contentType = 'application/octet-stream') {
+    return this.mutate('post', `/attachments/${attachmentId}/versions`).set('Content-Type', contentType).send(data);
+  }
 }
 
 export function inviteTokenFromMail(ctx: TestContext, email: string): string {

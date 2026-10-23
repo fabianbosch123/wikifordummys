@@ -7,7 +7,7 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Aufgabe | Befehl | Automatisch |
 | --- | --- | --- |
 | Zustand ansehen | `sudo wikictl status` | |
-| Logs | `sudo wikictl logs [caddy\|web\|api\|db\|redis\|office]` | |
+| Logs | `sudo wikictl logs [caddy\|web\|api\|db\|redis\|office\|drawio]` | |
 | Update | `sudo wikictl update [git-ref]` | |
 | Sicherung | `sudo wikictl backup` | täglich ca. 3:15 Uhr (`wikifordummys-backup.timer`) |
 | Test-Wiederherstellung | `sudo wikictl restore-test` | am 1. jedes Monats (`wikifordummys-restore-test.timer`) |
@@ -19,6 +19,7 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Einstellungen ändern | `sudo wikictl reconfigure` (startet den Installer) | |
 | Platz schaffen | `sudo wikictl cleanup` | Build-Cache, unbenutzte Images, Journal; Volumes und Sicherungen bleiben |
 | Office-Editor an/aus, prüfen | `sudo wikictl office on\|off`, `sudo wikictl office-check` | |
+| draw.io an/aus | `sudo wikictl drawio on\|off` | |
 
 Timer ansehen: `systemctl list-timers 'wikifordummys-*'`, letzte Läufe: `journalctl -u wikifordummys-backup.service`.
 
@@ -35,6 +36,17 @@ Der optionale Office-Editor ist [Euro-Office](https://github.com/euro-office) (A
 - **Prüfen:** `sudo wikictl office-check` lässt den Editor-Server eine Datei bei der API holen und umwandeln und holt das Ergebnis zurück. Fehler −8 bedeutet ein abweichendes JWT-Geheimnis, −4, dass der Editor-Server die API nicht erreicht.
 - **Hinter einem vorhandenen Proxy** muss dieser WebSockets weiterreichen (Beispiele in [installation.md](installation.md)).
 
+## Zeichnungen mit draw.io
+
+Im Seiteneditor fügt **◇ Zeichnung** eine Zeichnung mit [draw.io](https://www.drawio.com/docs/manual) ein (diagrams.net, Apache-2.0), z. B. einen Netzwerkplan; **✎ Zeichnung bearbeiten** oder ein Doppelklick öffnet sie wieder. Der Installer fragt, ob draw.io laufen soll (`WIKI_DRAWIO=true` in `.env`). Bestehende Installationen richtet `sudo wikictl update` einmal ein (mit Terminal nach Rückfrage). An- und abschalten jederzeit mit `sudo wikictl drawio on` bzw. `off`; abgeschaltet bleiben vorhandene Zeichnungen als Bild sichtbar.
+
+- **Aufbau:** Dienst `drawio`, gebaut aus `deploy/drawio` (die offizielle `draw.war` von GitHub, Version und Prüfsumme im Dockerfile; ohne Java/Tomcat, ein kleiner Caddy liefert nur die Dateien aus). Etwa 150 MB Platz, kaum Arbeitsspeicher. Erreichbar unter `https://<domain>/draw/`, im internen Docker-Netz `drawio` nur für Caddy, ohne Zugang ins Internet. Die App läuft komplett im Browser.
+- **Abschottung:** Der Rahmen hat per `sandbox` (Attribut und CSP von Caddy) einen eigenen, leeren Ursprung: kein Zugriff auf Cookies, Speicher oder API des Wikis, Verbindungen nur zu `/draw/` selbst, keine externen Dienste (`stealth`). Daten tauschen Seiteneditor und draw.io nur per postMessage aus.
+- **Speichern:** draw.io liefert ein PNG mit eingebetteten draw.io-Daten. Neue Zeichnungen werden Anhang der Seite (`<Titel>.drawio.png`), bearbeitete eine **neue Fassung** dieses Anhangs. Die Seite verweist auf die Fassung; erst „Speichern“ im Seiteneditor übernimmt sie. Ältere Seitenversionen zeigen die damalige Zeichnung. Die Beschriftungen landen als Text im Seiteninhalt und sind damit durchsuchbar.
+- **Rechte:** wie bei Seiten: Leser sehen die Zeichnung, nur Bearbeiter können sie ändern. Neue Zeichnungen gehen erst, wenn die Seite angelegt ist.
+- **Daten:** draw.io speichert nichts; Zeichnungen sind Anhänge und damit in der Sicherung enthalten. Einstellungen in draw.io (z. B. zusätzliche Formen) gelten nur, solange der Editor offen ist.
+- **Neue draw.io-Version:** in `deploy/drawio/Dockerfile` `DRAWIO_VERSION` und `DRAWIO_SHA256` (`sha256sum draw.war`) ändern, dann `sudo wikictl update`.
+
 ## Updates
 
 ```bash
@@ -42,7 +54,7 @@ sudo wikictl update            # neuester Stand des aktuellen Branches
 sudo wikictl update v0.4.0     # bestimmter Tag oder Commit
 ```
 
-Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor) fragt es einmal ab. Vorher prüft es den freien Platz (4 GB, mit Office-Editor 6 GB) und räumt bei Bedarf den Docker-Build-Cache auf; danach entfernt es Build-Cache älter als 24 Stunden und abgelöste Images. Von den Datenbank-Sicherungen in `/var/backups/wikifordummys/` bleiben die letzten fünf. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
+Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor, draw.io) fragt es einmal ab. Vorher prüft es den freien Platz (4 GB, mit Office-Editor 6 GB) und räumt bei Bedarf den Docker-Build-Cache auf; danach entfernt es Build-Cache älter als 24 Stunden und abgelöste Images. Von den Datenbank-Sicherungen in `/var/backups/wikifordummys/` bleiben die letzten fünf. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
 
 Ubuntu-Sicherheitsupdates laufen automatisch (unattended-upgrades), sofern im Installer gewählt. Docker-Basis-Images werden bei `wikictl update` mit `--pull` aktualisiert.
 

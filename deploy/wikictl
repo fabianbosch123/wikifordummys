@@ -15,7 +15,7 @@ Verwendung: sudo wikictl <befehl> [optionen]
 
 Betrieb
   status                  Zustand der Dienste, Health-Check, Zertifikat, letzte Sicherung
-  logs [dienst]           Logs verfolgen (caddy, web, api, db, redis, office)
+  logs [dienst]           Logs verfolgen (caddy, web, api, db, redis, office, drawio)
   start | stop | restart  Dienste starten, anhalten, neu starten
   update [git-ref]        Sicherung, neuen Stand holen (Standard: aktueller Branch), bauen, neu starten
   reconfigure             Installer erneut ausführen (Domain, SMTP, Sicherung … ändern)
@@ -33,6 +33,10 @@ Benutzer und Mail
 Office-Editor (WIKI_OFFICE in .env)
   office on | off         Office-Editor einrichten bzw. abschalten (das Update fragt einmal danach)
   office-check            Editor-Server, JWT-Geheimnis und Dateiaustausch prüfen
+
+Zeichnungen (WIKI_DRAWIO in .env)
+  drawio on | off         draw.io für Zeichnungen auf Seiten einrichten bzw. abschalten
+                          (vorhandene Zeichnungen bleiben als Bild sichtbar)
 
 Sicherung (restic, Ziel aus .env)
   backup                  jetzt sichern (Datenbank, Anhänge, Zertifikate, .env), alte Stände ausdünnen
@@ -90,6 +94,15 @@ cmd_status() {
         fi
         ;;
     esac
+  fi
+  if [[ $(env_get WIKI_DRAWIO) == true ]]; then
+    step "draw.io"
+    local drawio_id drawio_health=''
+    drawio_id=$(compose ps -q drawio 2>/dev/null || true)
+    if [[ -n $drawio_id ]]; then
+      drawio_health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$drawio_id" 2>/dev/null || true)
+    fi
+    if [[ $drawio_health == healthy ]]; then ok "draw.io bereit."; else warn "draw.io antwortet nicht (${drawio_health:-läuft nicht}; wikictl logs drawio)."; fi
   fi
   if [[ ${tls:-letsencrypt} != proxy ]]; then
     step "Zertifikat"
@@ -155,14 +168,19 @@ cmd_update_apply() {
   need_env
   local before=${1:-}
   if [[ -z $(env_get WIKI_OFFICE) ]]; then offer_office; fi
+  if [[ -z $(env_get WIKI_DRAWIO) ]]; then offer_drawio; fi
   step "Bauen und neu starten"
   compose build --pull
   if [[ $(env_get WIKI_OFFICE) != true ]]; then
     compose --profile office rm -sf office >/dev/null 2>&1 || true
   fi
+  if [[ $(env_get WIKI_DRAWIO) != true ]]; then
+    compose --profile drawio rm -sf drawio >/dev/null 2>&1 || true
+  fi
   compose up -d --remove-orphans
   reload_caddy
   if wait_healthy 300; then
+    wait_drawio
     wait_office
     ok "Update abgeschlossen."
   else
@@ -264,6 +282,54 @@ cmd_office() {
       ;;
     *)
       echo "Verwendung: sudo wikictl office on|off" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# Neu seit dem Update: draw.io anbieten (nur einmal; die Antwort landet in .env). Klein und ohne externe Dienste,
+# daher ohne Rückfrage (z. B. bei Updates per Skript) eingeschaltet.
+offer_drawio() {
+  step "Neu: Zeichnungen mit draw.io"
+  info "Auf Seiten lassen sich jetzt Zeichnungen wie Netzwerkpläne mit draw.io anlegen und bearbeiten"
+  info "(kleiner zusätzlicher Dienst: nur statische Dateien, etwa 150 MB Platz, kaum Arbeitsspeicher)."
+  local answer=j
+  if [[ -t 0 ]]; then
+    read -r -p "draw.io jetzt einrichten? [J/n]: " answer || answer=''
+    answer=${answer:-j}
+  fi
+  case ${answer,,} in
+    j | ja | y | yes)
+      env_set WIKI_DRAWIO true
+      ok "draw.io wird mit diesem Update eingerichtet. Abschalten mit: sudo wikictl drawio off"
+      ;;
+    *)
+      env_set WIKI_DRAWIO false
+      info "draw.io bleibt aus. Später einschalten mit: sudo wikictl drawio on"
+      ;;
+  esac
+}
+
+# draw.io an- oder abschalten, ohne den ganzen Installer
+cmd_drawio() {
+  need_root
+  need_env
+  case ${1:-} in
+    on)
+      env_set WIKI_DRAWIO true
+      compose build drawio
+      compose up -d --remove-orphans
+      reload_caddy
+      wait_drawio
+      ;;
+    off)
+      env_set WIKI_DRAWIO false
+      compose --profile drawio rm -sf drawio >/dev/null 2>&1 || true
+      compose up -d --remove-orphans
+      ok "draw.io abgeschaltet. Vorhandene Zeichnungen bleiben als Bild auf den Seiten sichtbar."
+      ;;
+    *)
+      echo "Verwendung: sudo wikictl drawio on|off" >&2
       exit 2
       ;;
   esac
@@ -536,6 +602,7 @@ main() {
     update) cmd_update "$@" ;;
     update-apply) cmd_update_apply "$@" ;;
     office) cmd_office "$@" ;;
+    drawio) cmd_drawio "$@" ;;
     cleanup) cmd_cleanup ;;
     reconfigure) exec "$WIKI_DIR/install.sh" "$@" ;;
     create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
