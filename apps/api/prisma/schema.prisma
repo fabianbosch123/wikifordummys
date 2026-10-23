@@ -1,5 +1,5 @@
 // Datenmodell Meilenstein 1: Benutzer, Gruppen, Einladungen, 2FA, Audit-Log.
-// Spaces und Seiten folgen in Meilenstein 2.
+// Meilenstein 2: Spaces, Seitenbaum, Seitenversionen.
 
 generator client {
   provider      = "prisma-client-js"
@@ -45,6 +45,11 @@ model User {
   passwordResets PasswordReset[]
   groups         GroupMember[]
   auditEntries   AuditLog[]
+  spacesCreated  Space[]         @relation("SpaceCreator")
+  pagesCreated   Page[]          @relation("PageCreator")
+  pagesUpdated   Page[]          @relation("PageUpdater")
+  pagesDeleted   Page[]          @relation("PageDeleter")
+  pageVersions   PageVersion[]
 
   @@map("users")
 }
@@ -136,4 +141,83 @@ model AuditLog {
   @@index([createdAt])
   @@index([action])
   @@map("audit_log")
+}
+
+enum SpaceStatus {
+  active
+  archived
+}
+
+model Space {
+  id          String      @id @default(uuid()) @db.Uuid
+  /// Kurzschlüssel wie IT oder HR, Großbuchstaben und Ziffern
+  key         String      @unique
+  name        String
+  description String      @default("")
+  status      SpaceStatus @default(active)
+  homePageId  String?     @unique @map("home_page_id") @db.Uuid
+  createdById String?     @map("created_by") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  homePage    Page?       @relation("SpaceHome", fields: [homePageId], references: [id], onDelete: SetNull)
+  createdBy   User?       @relation("SpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  pages       Page[]      @relation("SpacePages")
+
+  @@map("spaces")
+}
+
+/// Aktueller Stand einer Seite. Jede Speicherung legt zusätzlich eine unveränderliche PageVersion an.
+model Page {
+  id          String        @id @default(uuid()) @db.Uuid
+  spaceId     String        @map("space_id") @db.Uuid
+  parentId    String?       @map("parent_id") @db.Uuid
+  /// Materialisierter Pfad aus allen Vorfahren und der Seite selbst: /<id>/<id>/
+  path        String
+  /// Reihenfolge unter Geschwistern, beginnend bei 0
+  position    Int
+  title       String
+  /// TipTap-JSON, nur erlaubte Knoten (S6)
+  content     Json
+  /// Reiner Text für Vergleich und spätere Volltextsuche
+  contentText String        @map("content_text")
+  version     Int           @default(1)
+  createdById String?       @map("created_by") @db.Uuid
+  updatedById String?       @map("updated_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  /// Papierkorb: gesetzt für die gelöschte Seite und alle mitgelöschten Unterseiten
+  deletedAt   DateTime?     @map("deleted_at")
+  deletedById String?       @map("deleted_by") @db.Uuid
+  space       Space         @relation("SpacePages", fields: [spaceId], references: [id], onDelete: Cascade)
+  parent      Page?         @relation("PageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Page[]        @relation("PageTree")
+  homeOf      Space?        @relation("SpaceHome")
+  createdBy   User?         @relation("PageCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   User?         @relation("PageUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  deletedBy   User?         @relation("PageDeleter", fields: [deletedById], references: [id], onDelete: Restrict)
+  versions    PageVersion[]
+
+  @@index([spaceId, parentId])
+  @@index([spaceId, path])
+  @@index([deletedAt])
+  @@map("pages")
+}
+
+/// Unveränderlich: UPDATE wird per Trigger verhindert
+model PageVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  pageId       String   @map("page_id") @db.Uuid
+  version      Int
+  title        String
+  content      Json
+  contentText  String   @map("content_text")
+  authorId     String?  @map("author_id") @db.Uuid
+  /// Gesetzt, wenn diese Version durch Wiederherstellen einer älteren entstanden ist
+  restoredFrom Int?     @map("restored_from")
+  createdAt    DateTime @default(now()) @map("created_at")
+  page         Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  author       User?    @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@unique([pageId, version])
+  @@map("page_versions")
 }

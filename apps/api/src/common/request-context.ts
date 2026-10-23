@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   isAdmin: boolean;
+  canCreateSpace: boolean;
   totpEnabled: boolean;
 }
 

@@ -31,5 +31,7 @@ export const Errors = {
   notFound: () => new ApiError(404, 'NOT_FOUND', 'Nicht gefunden.'),
   invalidToken: () => new ApiError(400, 'INVALID_TOKEN', 'Der Link ist ungültig oder abgelaufen.'),
   badRequest: (message: string, code = 'BAD_REQUEST') => new ApiError(400, code, message),
-  conflict: (message: string) => new ApiError(409, 'CONFLICT', message),
+  conflict: (message: string, extra: Record<string, unknown> = {}) => new ApiError(409, 'CONFLICT', message, extra),
+  spaceArchived: () => new ApiError(403, 'SPACE_ARCHIVED', 'Der Space ist archiviert und kann nicht bearbeitet werden.'),
+  invalidContent: (message: string) => new ApiError(400, 'INVALID_CONTENT', message),
 };

@@ -22,13 +22,18 @@ import { RateLimitService } from './infra/rate-limit.service';
 import { createRedis, REDIS } from './infra/redis';
 import { MailService } from './mail/mail.service';
 import { MeController } from './me/me.controller';
+import { PagesController } from './pages/pages.controller';
+import { PagesService } from './pages/pages.service';
+import { PermissionService } from './spaces/permission.service';
+import { SpacesController } from './spaces/spaces.controller';
+import { SpacesService } from './spaces/spaces.service';
 
 @Module({})
 export class AppModule implements NestModule {
   static forRoot(config: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [AuthController, MeController, AdminController, HealthController],
+      controllers: [AuthController, MeController, AdminController, SpacesController, PagesController, HealthController],
       providers: [
         { provide: APP_CONFIG, useValue: config },
         {
@@ -51,6 +56,9 @@ export class AppModule implements NestModule {
         MailService,
         AuthService,
         AdminService,
+        PermissionService,
+        SpacesService,
+        PagesService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
       exports: [PrismaService, AuthService, AuditService, UserAccessService, REDIS],

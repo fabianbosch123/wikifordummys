@@ -3,11 +3,12 @@
 Selbst gehostetes, Confluence-ähnliches Wiki mit integrierter Benutzerverwaltung für Ubuntu.
 Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, pflegt es gemeinsam und findet es über die Volltextsuche.
 
-**Stand: Meilenstein 1 (Fundament und Anmeldung).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log sind fertig. Spaces, Seiten und Editor folgen mit Meilenstein 2.
+**Stand: Meilenstein 2 (Spaces und Seiten).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1) sowie Spaces, Seitenbaum, Editor und Versionen (M2) sind fertig. Rechte je Space, Anhänge und Suche folgen mit Meilenstein 3.
 
 ## Inhalt
 
 - [Funktionen in Meilenstein 1](#funktionen-in-meilenstein-1)
+- [Funktionen in Meilenstein 2](#funktionen-in-meilenstein-2)
 - [Aufbau](#aufbau)
 - [Betrieb auf Ubuntu 24.04](#betrieb-auf-ubuntu-2404)
 - [Lokale Entwicklung](#lokale-entwicklung)
@@ -25,6 +26,16 @@ Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, p
 - **Profil:** Anzeigename, Passwort ändern, angemeldete Geräte ansehen und abmelden, neue Wiederherstellungscodes.
 - **Administration:** Benutzer einladen, deaktivieren, reaktivieren, Adminrechte vergeben, 2FA zurücksetzen, Sitzungen beenden; Gruppen anlegen und Mitglieder pflegen; Audit-Log mit Filter.
 - Systemgruppen `alle-benutzer` (jedes aktive Konto automatisch) und `administratoren`. Konten werden deaktiviert statt gelöscht.
+
+## Funktionen in Meilenstein 2
+
+- **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite; archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus.
+- **Seitenbaum** beliebig tief, mit Brotkrumen; Seiten per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
+- **Editor (TipTap):** Überschriften, Fett/Kursiv/Durchgestrichen/Code, Listen, Zitate, Code-Blöcke, Tabellen, Bilder (per https-Adresse), Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Gespeichert wird JSON, kein HTML.
+- **Versionen:** Jede Speicherung ist eine unveränderliche Version. Verlauf mit zeilenweisem Vergleich zweier Versionen; alte Versionen lassen sich ansehen und als neue Version wiederherstellen.
+- **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.
+- **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt.
+- **Rechte bis Meilenstein 3:** Alle aktiven Benutzer lesen und bearbeiten alle Spaces. Space-Admins (Ersteller und Systemadmins) ändern Einstellungen, archivieren und löschen Seiten. Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`). Frei vergebbare Space-Rollen und Seiteneinschränkungen kommen mit Meilenstein 3.
 
 ## Aufbau
 
@@ -202,7 +213,7 @@ Die CI (`.github/workflows/ci.yml`) führt bei jedem Push Linter, Typprüfung, a
 
 ## Sicherheit
 
-Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. Für Meilenstein 1 gilt:
+Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. Umgesetzt und getestet sind:
 
 | Nr. | Anforderung | Umsetzung | Nachweis |
 | --- | --- | --- | --- |
@@ -211,10 +222,13 @@ Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. F
 | S3 | Rate-Limiting | Login und 2FA: 5 pro Minute je IP und je Konto, danach steigende Sperre (1 min, 2 min, … bis 1 h); Passwort-Reset: 3 pro Stunde; API: 300 pro Minute je Benutzer | `auth.spec.ts` (429 mit `Retry-After`) |
 | S4 | Sitzungen | Serverseitig in Redis (nur Hash der Session-ID); Cookie `__Host-session`, HttpOnly, Secure, SameSite=Lax; neue Session-ID nach Passwort und nach 2FA; 12 h Leerlauf, 14 Tage absolut; Passwortänderung beendet alle anderen Sitzungen | `auth.spec.ts` |
 | S5 | CSRF | SameSite-Cookie plus Double-Submit-Token (`__Host-csrf` / Header `X-CSRF-Token`) bei allen ändernden Anfragen; Origin- und Referer-Prüfung | `auth.spec.ts` |
+| S6 | XSS | Seiten als TipTap-JSON; die API lässt nur erlaubte Knoten, Marks und Attribute zu und prüft Link- und Bild-Adressen (kein `javascript:`, `data:` usw.); die Weboberfläche rendert nur diese Knoten als React-Elemente, ohne `dangerouslySetInnerHTML` (Linter-Regel); eingefügtes HTML wird mit DOMPurify bereinigt; Content-Security-Policy mit Nonce je Anfrage (`script-src 'self' 'nonce-…' 'strict-dynamic'`) | `content.spec.ts`, `pages.spec.ts` (API und E2E) |
+| S8 | Autorisierung | Zentraler Guard („verweigern“ als Standard) plus `PermissionService` als einzige Stelle für Space- und Seitenrechte; ohne Rolle 404; Baum und Listen nutzen dieselbe Prüfung | `pages.spec.ts`: jede Route ohne Anmeldung, ohne 2FA, ohne Recht |
+| S9 | Eingaben | Alle DTOs validiert, unbekannte Felder abgelehnt, Inhalte zusätzlich per Whitelist geprüft; nur parametrisierte SQL-Abfragen | `pages.spec.ts` |
 | S10 | Keine Konto-Ausforschung | Gleiche Antwort und gleiche Argon2-Arbeit bei unbekannter E-Mail (Login, Reset); Sperren gelten auch für unbekannte Adressen | `auth.spec.ts` |
-| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen, Admin-Aktionen mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts` |
+| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen, Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten löschen und wiederherstellen, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts` |
 
-Bereits vorbereitet für spätere Meilensteine: zentraler Guard mit Standard „verweigern“ (S8), Validierung aller Eingaben mit Ablehnung unbekannter Felder und Linter-Regel gegen rohe SQL-Abfragen (S9), Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Die vollständige Content-Security-Policy mit Nonces (S6) und die Upload-Prüfung (S7) kommen mit Meilenstein 2 bzw. 3.
+Außerdem: Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Die Upload-Prüfung (S7) und Rechtetests für frei vergebbare Space-Rollen (S8) kommen mit Meilenstein 3. Bilder werden bis dahin per https-Adresse eingebunden; dabei sieht der fremde Server die IP-Adresse der Lesenden.
 
 Hinweis zum Zurücksetzen der 2FA durch einen Admin: Danach kann sich die Person mit ihrem Passwort anmelden und die 2FA neu einrichten. Deshalb vorher die Identität der Person prüfen (z. B. telefonisch).
 
@@ -239,13 +253,17 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `POST /admin/users/:id/invite`, `POST /admin/users/:id/reset-2fa`, `DELETE /admin/users/:id/sessions` | Erneut einladen, 2FA zurücksetzen, abmelden | Systemadmin |
 | `GET/POST /admin/groups`, `PATCH/DELETE /admin/groups/:id`, `PUT /admin/groups/:id/members` | Gruppen | Systemadmin |
 | `GET /admin/audit` | Audit-Log | Systemadmin |
+| `GET/POST /spaces`, `GET/PATCH /spaces/:key` | Spaces auflisten, anlegen, ändern, archivieren | angemeldet / `create_space` / Space-Admin |
+| `GET /spaces/:key/tree`, `GET /spaces/:key/trash` | Seitenbaum, Papierkorb | Leser / Space-Admin |
+| `POST /pages`, `GET/PUT/DELETE /pages/:id` | Seite anlegen, lesen, speichern (mit `version`, sonst 409), in den Papierkorb | Bearbeiter / Leser / Bearbeiter / Space-Admin |
+| `POST /pages/:id/move`, `POST /pages/:id/undelete` | Verschieben, aus dem Papierkorb holen | Bearbeiter / Space-Admin |
+| `GET /pages/:id/versions[/:version]`, `GET /pages/:id/diff?from=&to=`, `POST /pages/:id/restore/:version` | Verlauf, Vergleich, Wiederherstellen | Leser / Leser / Bearbeiter |
 | `GET /health` | Datenbank, Redis, Speicherplatz | öffentlich |
 
 ## Nächste Meilensteine
 
 | Meilenstein | Inhalt |
 | --- | --- |
-| M2 Spaces und Seiten | Spaces, Seitenbaum, TipTap-Editor, Versionen mit Vergleich und Wiederherstellen |
 | M3 Rechte, Anhänge, Suche | Space-Rollen, Seiteneinschränkungen, Uploads, Volltextsuche, Hintergrund-Worker |
 | M4 Go-live | Deployment, Backups mit restic, Monitoring, OWASP-ZAP-Scan, Pilotbetrieb |
 | M5 Zusammenarbeit | Kommentare, Benachrichtigungen, Vorlagen, Labels |
