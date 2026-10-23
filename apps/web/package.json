@@ -10,7 +10,14 @@
     "test": "echo 'Weboberfläche wird über die Ende-zu-Ende-Tests (e2e/) geprüft'"
   },
   "dependencies": {
+    "@tiptap/core": "~3.31.4",
+    "@tiptap/extension-image": "~3.31.4",
+    "@tiptap/extension-table": "~3.31.4",
+    "@tiptap/pm": "~3.31.4",
+    "@tiptap/react": "~3.31.4",
+    "@tiptap/starter-kit": "~3.31.4",
     "@wiki/shared": "workspace:*",
+    "dompurify": "^3.4.17",
     "next": "^15.5.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

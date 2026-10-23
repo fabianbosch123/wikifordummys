@@ -32,6 +32,7 @@ export class UserAccessService {
       displayName: user.displayName,
       totpEnabled: user.totpEnabled,
       isAdmin: perms.has('admin'),
+      canCreateSpace: perms.has('admin') || perms.has('create_space'),
     };
   }
 

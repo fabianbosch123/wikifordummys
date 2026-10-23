@@ -1,5 +1,8 @@
 /** Gemeinsame Typen und Regeln für API und Weboberfläche. */
 
+export * from './content';
+import type { DocNode } from './content';
+
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 256;
 
@@ -30,6 +33,8 @@ export interface MeDto {
   email: string;
   displayName: string;
   isAdmin: boolean;
+  /** Darf eigene Spaces anlegen (globales Recht create_space) */
+  canCreateSpace: boolean;
   totpEnabled: boolean;
 }
 
@@ -88,3 +93,101 @@ export const SYSTEM_GROUPS = {
   ALL_USERS: 'alle-benutzer',
   ADMINS: 'administratoren',
 } as const;
+
+// ---------- Spaces und Seiten (Meilenstein 2) ----------
+
+export const SPACE_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
+export const PAGE_TITLE_MAX_LENGTH = 200;
+
+export type SpaceStatus = 'active' | 'archived';
+/** Rolle im Space; ab Meilenstein 3 frei vergebbar, bis dahin Space-Admin = Ersteller und Systemadmins */
+export type SpaceRole = 'admin' | 'editor' | 'viewer';
+
+export interface UserRefDto {
+  id: string;
+  displayName: string;
+}
+
+export interface SpaceDto {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  status: SpaceStatus;
+  homePageId: string | null;
+  createdBy: UserRefDto | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Rolle des angemeldeten Benutzers */
+  role: SpaceRole;
+  /** Darf Seiten anlegen und bearbeiten (Rolle und Space nicht archiviert) */
+  canEdit: boolean;
+}
+
+export interface TreeNodeDto {
+  id: string;
+  parentId: string | null;
+  title: string;
+  position: number;
+}
+
+export interface PageDto {
+  id: string;
+  spaceKey: string;
+  parentId: string | null;
+  title: string;
+  content: DocNode;
+  version: number;
+  isHome: boolean;
+  /** Vorfahren von der Wurzel bis zum direkten Elternteil */
+  ancestors: { id: string; title: string }[];
+  createdBy: UserRefDto | null;
+  updatedBy: UserRefDto | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export interface PageVersionSummaryDto {
+  version: number;
+  title: string;
+  author: UserRefDto | null;
+  createdAt: string;
+  /** Wiederhergestellt aus dieser Version, sonst null */
+  restoredFrom: number | null;
+}
+
+export interface PageVersionDto extends PageVersionSummaryDto {
+  pageId: string;
+  content: DocNode;
+}
+
+export interface DiffLineDto {
+  type: 'added' | 'removed' | 'unchanged';
+  text: string;
+}
+
+export interface PageDiffDto {
+  from: number;
+  to: number;
+  title: { from: string; to: string };
+  lines: DiffLineDto[];
+}
+
+export interface TrashEntryDto {
+  id: string;
+  title: string;
+  deletedAt: string;
+  deletedBy: UserRefDto | null;
+  /** Anzahl mitgelöschter Unterseiten */
+  descendants: number;
+  /** Endgültige Löschung nach Ablauf der Frist */
+  purgeAt: string;
+}
+
+export const TRASH_RETENTION_DAYS = 30;
+
+export interface ConflictBody {
+  error: { code: 'CONFLICT'; message: string; current: PageDto };
+}
