@@ -2,7 +2,7 @@
 
 import type { AttachmentDto, AttachmentVersionDto } from '@wiki/shared';
 import Link from 'next/link';
-import { ChangeEvent, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import { Alert, formatDate } from '@/components/ui';
 import { api, errorMessage, uploadAttachment } from '@/lib/api';
 import { useApiData } from '@/lib/data';
@@ -49,10 +49,37 @@ function Versions({ attachment }: { attachment: AttachmentDto }) {
   );
 }
 
-/** Anhänge einer Seite: Bilder mit Vorschau, PDF zum Öffnen im Browser, Office-Dokumente im Editor, alles andere zum Herunterladen */
+const PANEL_KEY = 'wiki.attachments.open';
+
+/** Ob das Anhänge-Panel offen ist, wird pro Browser gemerkt (Standard: offen) */
+function usePanelOpen(): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(PANEL_KEY) === '0') setOpen(false);
+    } catch {
+      // Speicher gesperrt (z. B. privates Fenster): bleibt offen
+    }
+  }, []);
+  function update(next: boolean) {
+    setOpen(next);
+    try {
+      window.localStorage.setItem(PANEL_KEY, next ? '1' : '0');
+    } catch {
+      // nicht merkbar, gilt dann nur für diese Ansicht
+    }
+  }
+  return [open, update];
+}
+
+/**
+ * Anhänge einer Seite als aufklappbares Panel rechts neben dem Inhalt:
+ * Bilder mit Vorschau, PDF zum Öffnen im Browser, Office-Dokumente im Editor, alles andere zum Herunterladen
+ */
 export function Attachments({ pageId, canEdit }: { pageId: string; canEdit: boolean }) {
   const list = useApiData<AttachmentDto[]>(`/pages/${pageId}/attachments`);
   const input = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = usePanelOpen();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -81,63 +108,70 @@ export function Attachments({ pageId, canEdit }: { pageId: string; canEdit: bool
     }
   }
 
-  if (list.error) return <Alert>{errorMessage(list.error)}</Alert>;
+  const count = list.data?.length;
 
   return (
-    <section className="attachments" aria-labelledby="attachments-title">
-      <h2 id="attachments-title">Anhänge</h2>
-      {list.data?.length === 0 && <p className="muted">Keine Anhänge.</p>}
-      <ul className="attachment-list">
-        {list.data?.map((a) => (
-          <li key={a.id}>
-            {a.preview === 'image' ? (
-              <img src={a.url} alt="" loading="lazy" />
-            ) : (
-              <span className="file-icon" aria-hidden>
-                {a.preview === 'pdf' ? 'PDF' : (a.filename.split('.').pop() ?? '').slice(0, 5).toUpperCase() || 'DATEI'}
+    <aside className="attachments" aria-label="Anhänge">
+      <details open={open} onToggle={(e) => e.currentTarget.open !== open && setOpen(e.currentTarget.open)}>
+        <summary>
+          <h2>Anhänge{count !== undefined && <span className="count"> ({count})</span>}</h2>
+        </summary>
+        {list.error && <Alert>{errorMessage(list.error)}</Alert>}
+        {count === 0 && <p className="muted">Keine Anhänge.</p>}
+        <ul className="attachment-list">
+          {list.data?.map((a) => (
+            <li key={a.id}>
+              {a.preview === 'image' ? (
+                <img src={a.url} alt="" loading="lazy" />
+              ) : (
+                <span className="file-icon" aria-hidden>
+                  {a.preview === 'pdf' ? 'PDF' : (a.filename.split('.').pop() ?? '').slice(0, 5).toUpperCase() || 'DATEI'}
+                </span>
+              )}
+              <span className="name">
+                <a href={a.url} target={a.preview ? '_blank' : undefined} rel="noopener">
+                  {a.filename}
+                </a>
+                <br />
+                <small className="muted">
+                  {formatSize(a.sizeBytes)} · {a.uploadedBy?.displayName ?? 'unbekannt'} · {formatDate(a.createdAt)}
+                  {a.version > 1 && <> · geändert {formatDate(a.updatedAt)}</>}
+                </small>
+                {a.version > 1 && <Versions attachment={a} />}
               </span>
-            )}
-            <span className="name">
-              <a href={a.url} target={a.preview ? '_blank' : undefined} rel="noopener">
-                {a.filename}
-              </a>
-              <br />
-              <small className="muted">
-                {formatSize(a.sizeBytes)} · {a.uploadedBy?.displayName ?? 'unbekannt'} · {formatDate(a.createdAt)}
-                {a.version > 1 && <> · geändert {formatDate(a.updatedAt)}</>}
-              </small>
-              {a.version > 1 && <Versions attachment={a} />}
-            </span>
-            {a.office && (
-              <Link className="button small secondary" href={`/attachments/${a.id}/office?mode=view`}>
-                Ansehen
-              </Link>
-            )}
-            {a.office === 'edit' && (
-              <Link className="button small" href={`/attachments/${a.id}/office?mode=edit`}>
-                Bearbeiten
-              </Link>
-            )}
-            <a className="button small secondary" href={`${a.url}?download=1`}>
-              Herunterladen
-            </a>
-            {canEdit && (
-              <button className="small danger" onClick={() => remove(a)}>
-                Löschen
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {canEdit && (
-        <p className="row">
-          <input ref={input} type="file" multiple hidden onChange={upload} data-testid="attachment-input" />
-          <button className="small" disabled={busy} onClick={() => input.current?.click()}>
-            {busy ? 'Wird hochgeladen …' : 'Datei hochladen'}
-          </button>
-        </p>
-      )}
-      <Alert>{error}</Alert>
-    </section>
+              <span className="actions">
+                {a.office && (
+                  <Link className="button small secondary" href={`/attachments/${a.id}/office?mode=view`}>
+                    Ansehen
+                  </Link>
+                )}
+                {a.office === 'edit' && (
+                  <Link className="button small" href={`/attachments/${a.id}/office?mode=edit`}>
+                    Bearbeiten
+                  </Link>
+                )}
+                <a className="button small secondary" href={`${a.url}?download=1`}>
+                  Herunterladen
+                </a>
+                {canEdit && (
+                  <button className="small danger" onClick={() => remove(a)}>
+                    Löschen
+                  </button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {canEdit && (
+          <p className="row">
+            <input ref={input} type="file" multiple hidden onChange={upload} data-testid="attachment-input" />
+            <button className="small" disabled={busy} onClick={() => input.current?.click()}>
+              {busy ? 'Wird hochgeladen …' : 'Datei hochladen'}
+            </button>
+          </p>
+        )}
+        <Alert>{error}</Alert>
+      </details>
+    </aside>
   );
 }
