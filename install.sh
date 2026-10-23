@@ -180,6 +180,7 @@ load_existing() {
   CUR_S3_SECRET=$(env_get BACKUP_S3_SECRET_ACCESS_KEY)
   CUR_MONITOR=$(env_get MONITOR_PING_URL)
   CUR_OFFICE=$(env_get WIKI_OFFICE)
+  CUR_DRAWIO=$(env_get WIKI_DRAWIO)
   CUR_BACKUP_PING=$(env_get BACKUP_PING_URL)
 
   # Bisherigen SMTP-Zugang zerlegen: smtp[s]://benutzer:passwort@server:port[?tls=off]
@@ -367,6 +368,17 @@ ask_office() {
   if ((OFFICE_ENABLE)); then WIKI_OFFICE=true; else WIKI_OFFICE=false; fi
 }
 
+ask_drawio() {
+  step "Zeichnungen (draw.io)"
+  info "Mit draw.io lassen sich auf Seiten Zeichnungen anlegen und bearbeiten, z. B. Netzwerkpläne oder Abläufe."
+  info "Läuft als kleiner Container unter https://$WIKI_DOMAIN/draw/ (nur statische Dateien, etwa 150 MB Platz,"
+  info "kaum Arbeitsspeicher) ohne Verbindung zu externen Diensten; die Zeichnungen speichert das Wiki als Anhänge."
+  local default=j
+  if [[ $CUR_DRAWIO == false ]]; then default=n; fi
+  ask_yes DRAWIO_ENABLE "draw.io einrichten?" "$default"
+  if ((DRAWIO_ENABLE)); then WIKI_DRAWIO=true; else WIKI_DRAWIO=false; fi
+}
+
 ask_backup() {
   step "Sicherung"
   info "Nächtliche, verschlüsselte Sicherung von Datenbank, Anhängen, Zertifikaten und .env mit restic"
@@ -487,6 +499,7 @@ summary() {
   fi
   if ((ADMIN_CREATE)); then info "  Administrator:  $ADMIN_NAME <$ADMIN_EMAIL>"; fi
   if [[ $WIKI_OFFICE == true ]]; then info "  Office-Editor:  an (https://$WIKI_DOMAIN/office/)"; else info "  Office-Editor:  aus"; fi
+  if [[ $WIKI_DRAWIO == true ]]; then info "  draw.io:        an (https://$WIKI_DOMAIN/draw/)"; else info "  draw.io:        aus"; fi
   if [[ -n $BACKUP_REPOSITORY ]]; then info "  Sicherung:      $BACKUP_REPOSITORY"; else info "  Sicherung:      aus"; fi
   if [[ -n $MONITOR_PING_URL ]]; then info "  Überwachung:    $MONITOR_PING_URL"; fi
   if ((!NONINTERACTIVE)); then
@@ -517,6 +530,7 @@ write_env() {
   env_set WIKI_DOMAIN "$WIKI_DOMAIN"
   env_set WIKI_TLS "$WIKI_TLS"
   env_set WIKI_OFFICE "$WIKI_OFFICE"
+  env_set WIKI_DRAWIO "$WIKI_DRAWIO"
   env_set SMTP_URL "$SMTP_URL"
   env_set MAIL_FROM "$MAIL_FROM"
   local pair
@@ -606,6 +620,9 @@ start_stack() {
     # Abgeschalteter Editor: Container entfernen; das Profil muss dafür ausdrücklich genannt werden
     compose --profile office rm -sf office >/dev/null 2>&1 || true
   fi
+  if [[ $WIKI_DRAWIO != true ]]; then
+    compose --profile drawio rm -sf drawio >/dev/null 2>&1 || true
+  fi
   compose up -d --remove-orphans
   info "Warte auf die API (Datenbankmigrationen laufen beim Start) …"
   if ! wait_healthy 300; then
@@ -616,6 +633,7 @@ start_stack() {
   ok "API läuft."
   reload_caddy
   check_through_caddy
+  wait_drawio
   wait_office
 }
 
@@ -819,6 +837,7 @@ main() {
   ask_smtp
   ask_admin
   ask_office
+  ask_drawio
   ask_backup
   ask_monitoring
   ask_system

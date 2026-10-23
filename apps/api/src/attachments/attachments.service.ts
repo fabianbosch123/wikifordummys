@@ -91,6 +91,24 @@ export class AttachmentsService {
     }
   }
 
+  /**
+   * Speichert den Anfrage-Inhalt als neue Fassung eines Anhangs (Rechte wie beim Hochladen).
+   * Gleicher Inhalt wie die aktuelle Fassung ergibt keine neue; geliefert wird der Anhang mit seiner aktuellen Fassung.
+   */
+  async uploadVersion(id: string, declaredLength: number | null, body: Readable, ctx: AuthContext): Promise<AttachmentDto> {
+    await this.load(ctx.user, id, 'edit');
+    if (declaredLength !== null && declaredLength > this.storage.maxBytes) throw Errors.tooLarge(this.storage.maxBytes / 1024 / 1024);
+    const stored = await this.storage.store(body);
+    if (stored.sizeBytes === 0) {
+      await this.storage.remove([stored.storageKey]);
+      throw Errors.badRequest('Die Datei ist leer.');
+    }
+    await this.addVersion(id, stored, ctx.user.id, { endSession: true });
+    const attachment = await this.prisma.attachment.findUnique({ where: { id }, include });
+    if (!attachment) throw Errors.notFound();
+    return this.toDto(attachment, true);
+  }
+
   async load(user: AuthUser, id: string, need: 'view' | 'edit') {
     const attachment = await this.prisma.attachment.findUnique({ where: { id }, include });
     if (!attachment) throw Errors.notFound();
@@ -142,14 +160,17 @@ export class AttachmentsService {
     }));
   }
 
-  /** Ältere Fassungen gibt es nur zum Herunterladen; der Dateiname bekommt die Fassung angehängt */
-  async downloadVersion(user: AuthUser, id: string, version: number): Promise<AttachmentDownload> {
+  /**
+   * Ältere Fassungen gibt es zum Herunterladen; der Dateiname bekommt die Fassung angehängt.
+   * Mit inline zeigt der Browser Bilder und PDF an (Zeichnungen auf Seiten verweisen auf eine feste Fassung).
+   */
+  async downloadVersion(user: AuthUser, id: string, version: number, inline = false): Promise<AttachmentDownload> {
     const { attachment } = await this.load(user, id, 'view');
     const row = await this.prisma.attachmentVersion.findUnique({ where: { attachmentId_version: { attachmentId: id, version } } });
     if (!row) throw Errors.notFound();
     const dot = attachment.filename.lastIndexOf('.');
     const filename = dot > 0 ? `${attachment.filename.slice(0, dot)} (Fassung ${version})${attachment.filename.slice(dot)}` : `${attachment.filename} (Fassung ${version})`;
-    return { file: await this.stream(row, filename, true), etag: `"${row.sha256}"` };
+    return { file: await this.stream(row, filename, !inline), etag: `"${row.sha256}"` };
   }
 
   /**

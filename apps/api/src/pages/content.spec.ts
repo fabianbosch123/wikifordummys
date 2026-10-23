@@ -1,4 +1,4 @@
-import { ContentError, docToLines, docToText, sanitizeDoc, tableLayout, type DocNode } from '@wiki/shared';
+import { ContentError, docToLines, docToText, drawingSrc, sanitizeDoc, tableLayout, type DocNode } from '@wiki/shared';
 
 const doc = (...content: DocNode[]): DocNode => ({ type: 'doc', content });
 const p = (text: string, marks?: DocNode['marks']): DocNode => ({ type: 'paragraph', content: [{ type: 'text', text, marks }] });
@@ -128,5 +128,37 @@ describe('Textzeilen für Vergleich und Suche', () => {
     );
     expect(lines).toEqual(['## Abschnitt', '• eins', '• zwei', '| A | B |', '[info] Hinweis']);
     expect(docToText(doc(p('a'), { type: 'paragraph' }, p('b')))).toBe('a\nb');
+  });
+});
+
+describe('Zeichnungen (draw.io)', () => {
+  const id = '3f0c8a6e-1b2d-4c5e-8f90-a1b2c3d4e5f6';
+
+  it('behält Anhang, Fassung, Größe und Beschriftungen und verwirft den Rest', () => {
+    const out = sanitizeDoc(
+      doc({
+        type: 'drawing',
+        attrs: { attachmentId: id.toUpperCase(), version: 3, title: 'Netz', width: 640.4, height: 99_999, text: 'Router\nSwitch', src: 'javascript:x', onload: 'x' },
+      }),
+    );
+    expect(out.content?.[0]).toEqual({ type: 'drawing', attrs: { attachmentId: id, version: 3, title: 'Netz', width: 640, text: 'Router\nSwitch' } });
+    expect(drawingSrc(out.content?.[0].attrs)).toBe(`/api/v1/attachments/${id}/versions/3?inline=1`);
+  });
+
+  it.each([
+    [{ attachmentId: '../../admin', version: 1 }],
+    [{ attachmentId: id, version: 0 }],
+    [{ attachmentId: id, version: '2' }],
+    [{ version: 1 }],
+  ])('lehnt ungültige Verweise ab: %j', (attrs) => {
+    expect(() => sanitizeDoc(doc({ type: 'drawing', attrs }))).toThrow(ContentError);
+    expect(drawingSrc(attrs as Record<string, unknown>)).toBeNull();
+  });
+
+  it('kürzt lange Beschriftungen und nimmt sie in Suche und Vergleich auf', () => {
+    const out = sanitizeDoc(doc({ type: 'drawing', attrs: { attachmentId: id, version: 1, text: 'x'.repeat(20_000) } }));
+    expect((out.content?.[0].attrs?.text as string).length).toBe(10_000);
+    const lines = docToLines(doc({ type: 'drawing', attrs: { attachmentId: id, version: 1, title: 'LAN', text: 'Router A\nFirewall' } }));
+    expect(lines).toEqual(['[Zeichnung: LAN] Router A Firewall']);
   });
 });

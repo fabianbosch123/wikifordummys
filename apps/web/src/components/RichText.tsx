@@ -1,4 +1,4 @@
-import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, tableLayout, type DocMark, type DocNode } from '@wiki/shared';
+import { COLUMN_WIDTH, drawingSrc, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, tableLayout, type DocMark, type DocNode } from '@wiki/shared';
 import { Fragment, ReactNode } from 'react';
 
 /**
@@ -127,6 +127,19 @@ function renderNode(node: DocNode, key: number): ReactNode {
           loading="lazy"
           referrerPolicy="no-referrer"
         />
+      );
+    }
+    case 'drawing': {
+      // Zeichnung aus draw.io: PNG einer festen Fassung des Anhangs; ein Klick öffnet sie in voller Größe
+      const src = drawingSrc(node.attrs);
+      if (!src) return null;
+      const title = typeof node.attrs?.title === 'string' && node.attrs.title ? node.attrs.title : 'Zeichnung';
+      return (
+        <figure key={key} className="drawing">
+          <a href={src} target="_blank" rel="noopener" title={`${title} in voller Größe öffnen`}>
+            <img src={src} alt={title} width={sizeAttr(node.attrs?.width)} height={sizeAttr(node.attrs?.height)} loading="lazy" />
+          </a>
+        </figure>
       );
     }
     case 'table':

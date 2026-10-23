@@ -325,3 +325,13 @@ label.check input { width: auto; margin-top: 3px; }
 .search-results p { margin: 4px 0 0; }
 .search-results mark { background: var(--info-bg); color: inherit; font-weight: 600; padding: 0 1px; }
 fieldset.field { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
+
+/* Zeichnungen (draw.io): PNG mit weißem Grund, damit Linien auch im dunklen Modus sichtbar bleiben */
+.rich figure.drawing, .editor-content .drawing { margin: 12px 0; }
+.rich .drawing img { display: block; max-width: 100%; height: auto; background: #fff; border: 1px solid var(--border); border-radius: 4px; }
+.editor-content .drawing { position: relative; display: block; width: fit-content; max-width: 100%; }
+.editor-content .drawing.selected img, .editor-content .drawing.ProseMirror-selectednode img { outline: 2px solid var(--primary); }
+.editor-content .drawing .drawing-actions { display: flex; gap: 6px; margin-top: 4px; }
+.drawio-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--surface); }
+.drawio-status { margin: 0; padding: 8px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--border); }
+.drawio-frame { flex: 1; width: 100%; border: 0; }

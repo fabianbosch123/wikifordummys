@@ -73,6 +73,12 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Si
 - **Fassungen:** Jedes Speichern im Editor legt eine neue Fassung des Anhangs an; ältere Fassungen bleiben zum Herunterladen erhalten.
 - **Sicherheit:** signierte Konfiguration und Rückrufe (JWT, gemeinsames Geheimnis), kurzlebige Datei-Links, Editor-Server ohne Internetzugang, Download-Adressen aus Rückrufen nur vom eigenen Editor-Server (Schutz vor SSRF), Typprüfung am Inhalt. Details in [docs/betrieb.md](docs/betrieb.md#office-editor).
 
+## Zeichnungen mit draw.io (optional)
+
+- **draw.io** (diagrams.net, Apache-2.0) im Seiteneditor: Knopf **◇ Zeichnung** fügt eine Zeichnung ein, z. B. einen Netzwerkplan (Formen für Netzwerk, Rack und Cisco sind gleich in der Seitenleiste). **✎ Zeichnung bearbeiten** oder Doppelklick öffnet sie wieder. Läuft selbst gehostet unter `/draw/`, ohne externe Dienste. Der Installer fragt, ob es laufen soll.
+- **Speicherung:** als PNG-Anhang der Seite mit eingebetteten draw.io-Daten (lässt sich auch in draw.io Desktop öffnen). Jedes Speichern legt eine neue Fassung des Anhangs an; die Seite verweist auf genau die Fassung, die beim Speichern der Seite aktuell war, damit ältere Seitenversionen die damalige Zeichnung zeigen. Beschriftungen der Zeichnung sind über die Suche auffindbar.
+- **Sicherheit:** draw.io läuft abgeschottet im Rahmen (eigener, leerer Ursprung ohne Zugriff auf Cookies und API), der Austausch läuft nur über postMessage; Rechte wie bei Seiten (Leser sehen, Bearbeiter bearbeiten). Details in [docs/betrieb.md](docs/betrieb.md#zeichnungen-mit-drawio).
+
 ## Aufbau
 
 ```
@@ -206,7 +212,9 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `GET/PUT /pages/:id/restrictions` | Seiteneinschränkungen (eigene und geerbte) | Leser / Bearbeiter |
 | `GET /pages/:id/attachments`, `POST /pages/:id/attachments?filename=` | Anhänge auflisten, hochladen (Datei als Body, `application/octet-stream`) | Leser / Bearbeiter |
 | `GET /attachments/:id[?download=1]`, `DELETE /attachments/:id` | Anhang abrufen, löschen | Leser / Bearbeiter |
-| `GET /attachments/:id/versions[/:version]` | Fassungen eines Anhangs auflisten, ältere herunterladen | Leser |
+| `GET /attachments/:id/versions[/:version][?inline=1]` | Fassungen eines Anhangs auflisten, ältere herunterladen (mit `inline=1` Bilder anzeigen, z. B. Zeichnungen) | Leser |
+| `POST /attachments/:id/versions` | Neue Fassung hochladen (Datei als Body, z. B. gespeicherte Zeichnung) | Bearbeiter |
+| `GET /features` | Eingeschaltete optionale Dienste (Office-Editor, draw.io) | angemeldet |
 | `GET /attachments/:id/office?mode=view\|edit` | Signierte Konfiguration für den Office-Editor | Leser / Bearbeiter |
 | `GET /office/files/:token`, `POST /office/callback` | Datei für den Editor-Server, Rückruf nach dem Speichern (von außen gesperrt) | signierter Link / JWT |
 | `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert | angemeldet |

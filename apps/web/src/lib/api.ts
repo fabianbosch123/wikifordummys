@@ -62,10 +62,10 @@ export async function api<T = unknown>(path: string, options: { method?: string;
   return body as T;
 }
 
-/** Lädt eine Datei als Anhang einer Seite hoch; der Inhalt geht direkt als Body an die API */
-export async function uploadAttachment(pageId: string, file: File): Promise<AttachmentDto> {
+/** Schickt eine Datei als Anfrage-Inhalt an die API (Hochladen von Anhängen und neuen Fassungen) */
+async function sendFile(path: string, file: Blob): Promise<AttachmentDto> {
   const send = async (token: string) =>
-    fetch(`/api/v1/pages/${pageId}/attachments?filename=${encodeURIComponent(file.name)}`, {
+    fetch(`/api/v1${path}`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': token },
       credentials: 'same-origin',
@@ -80,6 +80,16 @@ export async function uploadAttachment(pageId: string, file: File): Promise<Atta
     throw new ApiError(res.status, err?.code ?? `HTTP_${res.status}`, err?.message ?? 'Unbekannter Fehler', body);
   }
   return body as AttachmentDto;
+}
+
+/** Lädt eine Datei als Anhang einer Seite hoch; der Inhalt geht direkt als Body an die API */
+export function uploadAttachment(pageId: string, file: File): Promise<AttachmentDto> {
+  return sendFile(`/pages/${pageId}/attachments?filename=${encodeURIComponent(file.name)}`, file);
+}
+
+/** Speichert eine Datei als neue Fassung eines vorhandenen Anhangs (z. B. eine bearbeitete Zeichnung) */
+export function uploadAttachmentVersion(attachmentId: string, file: Blob): Promise<AttachmentDto> {
+  return sendFile(`/attachments/${attachmentId}/versions`, file);
 }
 
 export function errorMessage(err: unknown): string {

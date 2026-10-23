@@ -26,7 +26,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web, api]
-    networks: [frontend, office]
+    networks: [frontend, office, drawio]
     logging: *logging
 
   web:
@@ -61,6 +61,8 @@ services:
       # Office-Editor (Dienst office, nur mit WIKI_OFFICE=true): gemeinsames Geheimnis für die signierten Nachrichten
       OFFICE_ENABLED: ${WIKI_OFFICE:-false}
       OFFICE_JWT_SECRET: ${OFFICE_JWT_SECRET:-}
+      # Zeichnungen mit draw.io (Dienst drawio, nur mit WIKI_DRAWIO=true)
+      DRAWIO_ENABLED: ${WIKI_DRAWIO:-false}
     volumes:
       - attachments:/var/lib/wiki/attachments
     healthcheck:
@@ -107,6 +109,29 @@ services:
     networks: [office]
     logging: *logging
 
+  # draw.io (Apache-2.0) für Zeichnungen auf Seiten, z. B. Netzwerkpläne: nur statische Dateien unter /draw/,
+  # die App läuft im Browser. Optional: Profil drawio (WIKI_DRAWIO=true in .env). Speichert nichts; Zeichnungen
+  # sind Anhänge der Seiten. Wird beim Installieren und bei Updates aus deploy/drawio gebaut (etwa 150 MB).
+  drawio:
+    build: { context: deploy/drawio }
+    profiles: [drawio]
+    restart: unless-stopped
+    # Ohne Root, nur lesend; das Caddy-Programm im Image trägt die Fähigkeit NET_BIND_SERVICE und startet ohne sie nicht
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/data:uid=65534,gid=65534", "/config:uid=65534,gid=65534"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/draw/index.html"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks: [drawio]
+    logging: *logging
+
   db:
     image: postgres:16
     restart: unless-stopped
@@ -146,6 +171,8 @@ networks:
   backend: { internal: true }
   # Editor-Server: erreichbar nur für Caddy und API, selbst ohne Zugang ins Internet
   office: { internal: true }
+  # draw.io: nur für Caddy erreichbar, ohne Zugang ins Internet
+  drawio: { internal: true }
 
 volumes:
   caddy_data: {}

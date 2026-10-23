@@ -15,6 +15,8 @@ export const e2eEnv: Record<string, string> = {
   OFFICE_JWT_SECRET: 'e2e-office-secret-e2e-office-secret-1234',
   OFFICE_INTERNAL_URL: 'http://localhost:3990',
   OFFICE_API_URL: 'http://localhost:3001',
+  // draw.io: tests/drawio.spec.ts ersetzt /draw/ durch eine Attrappe
+  DRAWIO_ENABLED: 'true',
   // Muss zur Adresse passen, mit der die Weboberfläche gebaut wurde (Standard)
   API_INTERNAL_URL: 'http://localhost:3001',
 };

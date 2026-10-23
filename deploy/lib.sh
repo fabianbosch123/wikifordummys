@@ -58,10 +58,12 @@ env_set() {
   mv "$tmp" "$file"
 }
 
-# Docker Compose mit der Konfiguration aus .env; der Office-Editor (Profil office) läuft nur mit WIKI_OFFICE=true
+# Docker Compose mit der Konfiguration aus .env; der Office-Editor (Profil office) läuft nur mit WIKI_OFFICE=true,
+# draw.io (Profil drawio) nur mit WIKI_DRAWIO=true
 compose() {
   local profile=()
-  if [[ $(env_get WIKI_OFFICE) == true ]]; then profile=(--profile office); fi
+  if [[ $(env_get WIKI_OFFICE) == true ]]; then profile+=(--profile office); fi
+  if [[ $(env_get WIKI_DRAWIO) == true ]]; then profile+=(--profile drawio); fi
   docker compose --project-directory "$WIKI_DIR" -f "$WIKI_DIR/docker-compose.yml" --env-file "$ENV_FILE" "${profile[@]}" "$@"
 }
 
@@ -125,6 +127,21 @@ wait_office() {
     sleep 5
   done
   warn "Der Office-Editor ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs office"
+}
+
+# Wartet kurz auf draw.io, falls eingeschaltet (liefert nur Dateien aus, startet in Sekunden)
+wait_drawio() {
+  [[ $(env_get WIKI_DRAWIO) == true ]] || return 0
+  local i state
+  for i in $(seq 1 20); do
+    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q drawio 2>/dev/null)" 2>/dev/null || true)
+    if [[ $state == healthy ]]; then
+      ok "draw.io läuft."
+      return 0
+    fi
+    sleep 3
+  done
+  warn "draw.io ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs drawio"
 }
 
 # Schaltet den Office-Editor in .env an oder aus; das JWT-Geheimnis wird nur erzeugt, wenn es fehlt

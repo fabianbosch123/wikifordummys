@@ -13,7 +13,7 @@ header {
 }
 
 # Das Wiki selbst darf nirgends eingebettet werden
-@wiki not path /office/*
+@wiki not path /office/* /draw/*
 header @wiki {
 	X-Frame-Options "DENY"
 	# Weboberfläche und API setzen eine eigene, strengere CSP (Weboberfläche mit Nonce je Anfrage, S6);
@@ -27,11 +27,22 @@ header /office/* {
 	?Content-Security-Policy "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
 }
 
-# Uploads von Anhängen dürfen groß sein (ATTACHMENT_MAX_MB, Standard 50 MiB; die API prüft die genaue Grenze),
-# ebenso Bilder, die im Office-Editor in Dokumente eingefügt werden; alle anderen Anfragen bleiben klein.
-@upload path_regexp ^/api/v1/pages/[^/]+/attachments$
+# draw.io (Dienst drawio, optional) läuft als Rahmen im Seiteneditor, abgeschottet vom Wiki: sandbox ohne
+# allow-same-origin gibt ihm einen eigenen, leeren Ursprung, also keinen Zugriff auf Cookies, Speicher und API.
+# Verbindungen nur zum eigenen Server (keine externen Dienste), Austausch mit dem Wiki nur per postMessage.
+# Die Dateien lädt draw.io dann von „fremdem“ Ursprung; sie sind öffentlich (Open Source), daher Access-Control-Allow-Origin *.
+header /draw/* {
+	X-Frame-Options "SAMEORIGIN"
+	Content-Security-Policy "sandbox allow-scripts allow-downloads allow-popups allow-modals; default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'self' blob: data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
+	Access-Control-Allow-Origin "*"
+	Cross-Origin-Resource-Policy "cross-origin"
+}
+
+# Uploads von Anhängen und neuen Fassungen dürfen groß sein (ATTACHMENT_MAX_MB, Standard 50 MiB; die API prüft die
+# genaue Grenze), ebenso Bilder, die im Office-Editor in Dokumente eingefügt werden; alle anderen Anfragen bleiben klein.
+@upload path_regexp ^/api/v1/(pages/[^/]+/attachments|attachments/[^/]+/versions)$
 @small {
-	not path_regexp ^/api/v1/pages/[^/]+/attachments$
+	not path_regexp ^/api/v1/(pages/[^/]+/attachments|attachments/[^/]+/versions)$
 	not path /office/*
 }
 request_body @upload {
@@ -67,6 +78,19 @@ handle_path /office/* {
 		header_up X-Forwarded-Prefix /office
 		header_up X-Forwarded-Proto https
 	}
+}
+
+# draw.io (Dienst drawio, optional): nur statische Dateien, Lesen genügt
+redir /draw /draw/
+@drawioWrite {
+	path /draw/*
+	not method GET HEAD
+}
+handle @drawioWrite {
+	respond 405
+}
+handle /draw/* {
+	reverse_proxy drawio:8080
 }
 
 handle {

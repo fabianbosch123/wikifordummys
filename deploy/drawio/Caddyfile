@@ -1,0 +1,16 @@
+# Liefert nur die Dateien von draw.io aus (/draw/…). Sicherheits-Header, CSP und die Abschottung im
+# Rahmen setzt der vorgeschaltete Caddy des Wikis (deploy/caddy/common.caddy).
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	root * /srv
+	file_server
+	header Cache-Control "public, max-age=3600"
+	log {
+		output discard
+	}
+}

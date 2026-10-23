@@ -243,7 +243,7 @@ export interface AttachmentDto {
   preview: 'image' | 'pdf' | null;
   uploadedBy: UserRefDto | null;
   createdAt: string;
-  /** Nummer der aktuellen Fassung (1 = so hochgeladen, danach eine je Speichern im Office-Editor) */
+  /** Nummer der aktuellen Fassung (1 = so hochgeladen, danach eine je Speichern im Office-Editor oder in draw.io) */
   version: number;
   updatedAt: string;
   /** Adresse zum Abrufen, z. B. für Bilder in Seiten */
@@ -268,6 +268,14 @@ export interface OfficeEditorDto {
   /** Konfiguration für new DocsAPI.DocEditor(), mit JWT signiert (Feld token) */
   config: Record<string, unknown>;
   attachment: AttachmentDto;
+}
+
+/** Eingeschaltete optionale Dienste */
+export interface FeaturesDto {
+  /** Office-Editor unter /office/ */
+  office: boolean;
+  /** draw.io unter /draw/: Zeichnungen auf Seiten anlegen und bearbeiten */
+  drawio: boolean;
 }
 
 export interface SearchHitDto {

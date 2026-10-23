@@ -177,6 +177,7 @@ Den Zugang können Administratoren später auch in der Weboberfläche unter **Ad
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | Absender; **`Wiki`** |
 | `ADMIN_CREATE`, `ADMIN_EMAIL`, `ADMIN_NAME` | **`j`** bei Neuinstallation |
 | `OFFICE_ENABLE` | **`j`** (bei weniger als 7 GB Arbeitsspeicher **`n`**), `n`; siehe [Office-Editor](betrieb.md#office-editor) |
+| `DRAWIO_ENABLE` | **`j`**, `n`; siehe [Zeichnungen mit draw.io](betrieb.md#zeichnungen-mit-drawio) |
 | `BACKUP_ENABLE`, `BACKUP_KIND`, `BACKUP_REPOSITORY` | **`j`**; **`local`**, `sftp`, `s3`, `rest`, `other`; Ziel |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_PING_URL` | nur bei S3; optional |
 | `MONITOR_PING_URL` | optional |

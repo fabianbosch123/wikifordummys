@@ -82,11 +82,20 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        app: [api, web]
+        include:
+          - app: api
+            dockerfile: apps/api/Dockerfile
+            context: .
+          - app: web
+            dockerfile: apps/web/Dockerfile
+            context: .
+          - app: drawio
+            dockerfile: deploy/drawio/Dockerfile
+            context: deploy/drawio
     steps:
       - uses: actions/checkout@v4
       - name: Image bauen
-        run: docker build -f apps/${{ matrix.app }}/Dockerfile -t wikifordummys-${{ matrix.app }}:ci .
+        run: docker build -f ${{ matrix.dockerfile }} -t wikifordummys-${{ matrix.app }}:ci ${{ matrix.context }}
       - name: Trivy-Scan
         # Trivy als festes Image statt als Action, damit keine fremden Action-Tags ausgeführt werden
         run: |
@@ -95,7 +104,7 @@ jobs:
 
   # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung
   # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
-  # In der Betriebsart internal läuft zusätzlich der Office-Editor (echtes Euro-Office-Image).
+  # In der Betriebsart internal laufen zusätzlich der Office-Editor (echtes Euro-Office-Image) und draw.io.
   install:
     runs-on: ubuntu-24.04
     strategy:
@@ -104,8 +113,10 @@ jobs:
         include:
           - mode: internal
             office: j
+            drawio: j
           - mode: proxy
             office: n
+            drawio: n
     steps:
       - uses: actions/checkout@v4
       - name: Shellcheck
@@ -113,7 +124,7 @@ jobs:
       - name: Installation (ohne Rückfragen)
         run: |
           sudo WIKI_TLS=${{ matrix.mode }} WIKI_DOMAIN=wiki.localtest PROXY_SAME_HOST=j \
-            SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI OFFICE_ENABLE=${{ matrix.office }} \
+            SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI OFFICE_ENABLE=${{ matrix.office }} DRAWIO_ENABLE=${{ matrix.drawio }} \
             BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic \
             INSTALL_UNATTENDED=n INSTALL_UFW=n INSTALL_FAIL2BAN=n \
             ./install.sh --non-interactive
@@ -158,6 +169,27 @@ jobs:
             echo "$path → $code"
             test "$code" = 404
           done
+      - name: draw.io über Caddy, abgeschottet
+        if: matrix.drawio == 'j'
+        run: |
+          base=https://wiki.localtest
+          opts=(-k --resolve wiki.localtest:443:127.0.0.1)
+          sudo wikictl status | tee status.txt
+          grep -q "draw.io bereit" status.txt
+          curl -fsS "${opts[@]}" -o index.html -D headers.txt "$base/draw/index.html?embed=1&proto=json"
+          grep -q 'js/bootstrap.js' index.html
+          # Eigener, leerer Ursprung im Rahmen (kein Zugriff auf Cookies und API), nur im eigenen Wiki einbettbar
+          grep -qi '^content-security-policy: sandbox allow-scripts' headers.txt
+          grep -qi "frame-ancestors 'self'" headers.txt
+          grep -qi '^x-frame-options: SAMEORIGIN' headers.txt
+          # Adressen zeigen auf den eigenen Server, nicht auf app.diagrams.net
+          curl -fsS "${opts[@]}" "$base/draw/js/PreConfig.js" | grep -q "location.host + '/draw'"
+          curl -fsS "${opts[@]}" -o /dev/null "$base/draw/js/app.min.js"
+          code=$(curl -s "${opts[@]}" -o /dev/null -w '%{http_code}' -X POST "$base/draw/index.html")
+          test "$code" = 405
+          # Die API kennt den Schalter
+          sudo docker compose exec -T api printenv DRAWIO_ENABLED | grep -q true
+
       - name: Bestehende Installation ohne Editor-Einstellung, Update, Editor nachträglich einschalten
         if: matrix.office == 'n'
         run: |
@@ -171,6 +203,15 @@ jobs:
           sudo wikictl status | grep -q "Office-Editor bereit"
           sudo wikictl office off
           test -z "$(sudo docker compose --profile office ps -q office)"
+          # draw.io: ohne Einstellung bietet das Update es an und schaltet es ohne Rückfrage ein; danach wieder aus
+          test -z "$(sudo docker compose --profile drawio ps -q drawio)"
+          sudo sed -i '/^WIKI_DRAWIO=/d' .env
+          sudo wikictl update-apply </dev/null
+          sudo grep -q "^WIKI_DRAWIO='true'" .env
+          sudo wikictl status | grep -q "draw.io bereit"
+          curl -fsS -H 'Host: wiki.localtest' -H 'X-Forwarded-Proto: https' -o /dev/null http://127.0.0.1:8080/draw/index.html
+          sudo wikictl drawio off
+          test -z "$(sudo docker compose --profile drawio ps -q drawio)"
           # Aufräumen lässt laufende Dienste und Volumes in Ruhe
           sudo wikictl cleanup
           sudo wikictl monitor
@@ -191,6 +232,6 @@ jobs:
       - name: Logs bei Fehlern
         if: failure()
         run: |
-          sudo docker compose --profile office logs --tail 200 || true
+          sudo docker compose --profile office --profile drawio logs --tail 200 || true
           id=$(sudo docker compose --profile office ps -q office 2>/dev/null || true)
           if [ -n "$id" ]; then sudo docker inspect -f '{{json .State.Health}}' "$id"; fi

@@ -4,13 +4,16 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type TreeNodeDto } from '@wiki/shared';
+import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type FeaturesDto, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
 import type { EditorView } from '@tiptap/pm/view';
-import { ChangeEvent, ReactNode, useRef, useState } from 'react';
+import { ChangeEvent, ReactNode, useContext, useRef, useState } from 'react';
 import { errorMessage, uploadAttachment } from '@/lib/api';
+import { useApiData } from '@/lib/data';
 import { flattenTree } from '@/lib/tree';
 import { Callout } from './callout';
+import { DrawioDialog } from './DrawioDialog';
+import { askDrawingTitle, Drawing, DrawingContext } from './drawing';
 import { pendingFile, placeholderNode, type UploadStore } from './uploads';
 
 export const editorExtensions = [
@@ -39,6 +42,7 @@ export const editorExtensions = [
     },
   }),
   Callout,
+  Drawing,
 ];
 
 function ToolButton({
@@ -115,6 +119,8 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: { i
 function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto[]; pageId?: string }) {
   const [picker, setPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [newDrawing, setNewDrawing] = useState<string | null>(null);
+  const drawio = useContext(DrawingContext);
   const imageInput = useRef<HTMLInputElement>(null);
   const s = useEditorState({
     editor,
@@ -267,7 +273,34 @@ function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto
         <ToolButton label="Tabelle einfügen" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
           ▦
         </ToolButton>
+        {drawio.enabled && (
+          <ToolButton
+            label={pageId ? 'Zeichnung mit draw.io einfügen' : 'Zeichnung einfügen (erst nach dem Anlegen der Seite möglich)'}
+            disabled={!pageId}
+            onClick={() => setNewDrawing(askDrawingTitle('Zeichnung'))}
+          >
+            ◇ Zeichnung
+          </ToolButton>
+        )}
       </div>
+      {newDrawing !== null && pageId && (
+        <DrawioDialog
+          pageId={pageId}
+          title={newDrawing}
+          onSaved={(attrs) => {
+            // Erstes Speichern fügt die Zeichnung ein, weiteres Speichern im selben Dialog aktualisiert sie
+            let found = false;
+            editor.state.doc.descendants((node, pos) => {
+              if (found || node.type.name !== 'drawing' || node.attrs.attachmentId !== attrs.attachmentId) return !found;
+              found = true;
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
+              return false;
+            });
+            if (!found) chain().insertContent({ type: 'drawing', attrs }).run();
+          }}
+          onClose={() => setNewDrawing(null)}
+        />
+      )}
       {s.table && (
         <div className="toolbar" role="toolbar" aria-label="Tabelle">
           <ToolButton label="Zeile darunter einfügen" onClick={() => chain().addRowAfter().run()}>
@@ -313,6 +346,7 @@ export function WikiEditor({
   onChange: (doc: DocNode) => void;
 }) {
   const self = useRef<Editor | null>(null);
+  const features = useApiData<FeaturesDto>('/features');
 
   function insertFiles(view: EditorView, files: File[], pos: number) {
     const e = self.current;
@@ -352,9 +386,11 @@ export function WikiEditor({
   self.current = editor;
   if (!editor) return <p className="muted">Editor wird geladen …</p>;
   return (
-    <div className="editor">
-      <Toolbar editor={editor} pages={pages} pageId={pageId} />
-      <EditorContent editor={editor} />
-    </div>
+    <DrawingContext.Provider value={{ pageId, enabled: features.data?.drawio === true }}>
+      <div className="editor">
+        <Toolbar editor={editor} pages={pages} pageId={pageId} />
+        <EditorContent editor={editor} />
+      </div>
+    </DrawingContext.Provider>
   );
 }
