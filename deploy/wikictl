@@ -1,0 +1,409 @@
+#!/usr/bin/env bash
+# wikictl: Betrieb von wikifordummys (Status, Update, Sicherung, Wiederherstellung, Überwachung).
+# Wird von install.sh nach /usr/local/bin/wikictl verlinkt.
+set -Eeuo pipefail
+
+# shellcheck source=deploy/lib.sh
+source "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)/lib.sh"
+
+STAGING=${WIKI_BACKUP_STAGING:-/var/lib/wikifordummys-backup}
+RETENTION=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
+
+usage() {
+  cat <<'EOF'
+Verwendung: sudo wikictl <befehl> [optionen]
+
+Betrieb
+  status                  Zustand der Dienste, Health-Check, Zertifikat, letzte Sicherung
+  logs [dienst]           Logs verfolgen (caddy, web, api, db, redis)
+  start | stop | restart  Dienste starten, anhalten, neu starten
+  update [git-ref]        Sicherung, neuen Stand holen (Standard: aktueller Branch), bauen, neu starten
+  reconfigure             Installer erneut ausführen (Domain, SMTP, Sicherung … ändern)
+
+Benutzer und Mail
+  create-admin --email <adresse> --name "<name>"   weiteren Administrator anlegen
+  mail-test [--to <adresse>]                        Mailversand prüfen
+
+Sicherung (restic, Ziel aus .env)
+  backup                  jetzt sichern (Datenbank, Anhänge, Zertifikate, .env), alte Stände ausdünnen
+  snapshots               vorhandene Sicherungen auflisten
+  restore <id|latest> [--with-env] [--yes]
+                          Stand zurückspielen; --with-env übernimmt auch .env (neuer Server)
+  restore-test            Sicherung probeweise in einen Wegwerf-Container einspielen und prüfen
+  backup-init             Sicherungsziel anlegen bzw. prüfen
+
+Sonstiges
+  ca-cert                 Stammzertifikat der internen Zertifizierungsstelle ausgeben (Betriebsart internal)
+  monitor                 Health-Check für den systemd-Timer; ruft MONITOR_PING_URL auf, wenn alles läuft
+EOF
+}
+
+need_root() {
+  [[ $(id -u) -eq 0 ]] || die "Bitte mit sudo ausführen."
+}
+
+need_env() {
+  [[ -f $ENV_FILE ]] || die "$ENV_FILE fehlt. Zuerst installieren: sudo $WIKI_DIR/install.sh"
+}
+
+volume_path() {
+  docker volume inspect -f '{{ .Mountpoint }}' "${COMPOSE_PROJECT}_$1" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+
+cmd_status() {
+  need_env
+  local domain tls
+  domain=$(env_get WIKI_DOMAIN)
+  tls=$(env_get WIKI_TLS)
+  step "Dienste"
+  compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
+  step "Health-Check"
+  compose exec -T api node -e "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>r.text()).then(t=>console.log(t),e=>{console.log('nicht erreichbar: '+e.message);process.exit(1)})" ||
+    warn "API antwortet nicht."
+  if [[ ${tls:-letsencrypt} != proxy ]]; then
+    step "Zertifikat"
+    local end
+    end=$(echo | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername "$domain" 2>/dev/null | openssl x509 -noout -enddate -issuer 2>/dev/null || true)
+    if [[ -n $end ]]; then info "$end"; else warn "Kein Zertifikat abrufbar."; fi
+  fi
+  step "Speicherplatz"
+  df -h / "$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)" | awk '!seen[$0]++'
+  step "Sicherung"
+  if restic_env; then
+    restic snapshots --latest 1 --compact 2>/dev/null || warn "Sicherungsziel nicht erreichbar."
+    systemctl list-timers 'wikifordummys-*' --no-pager 2>/dev/null || true
+  else
+    warn "Keine Sicherung eingerichtet (sudo ./install.sh oder BACKUP_* in .env)."
+  fi
+  info "Version: $(git -C "$WIKI_DIR" describe --always --tags 2>/dev/null || echo unbekannt)"
+}
+
+cmd_logs() {
+  need_env
+  compose logs -f --tail 100 "$@"
+}
+
+cmd_update() {
+  need_root
+  need_env
+  local ref=${1:-}
+  step "Sicherung vor dem Update"
+  if restic_env; then
+    cmd_backup
+  else
+    install -d -m 700 /var/backups/wikifordummys
+    local file
+    file=/var/backups/wikifordummys/vor-update-$(date +%F-%H%M).sql.gz
+    compose exec -T db pg_dump -U wiki wiki | gzip >"$file"
+    chmod 600 "$file"
+    ok "Datenbank gesichert nach $file (Anhänge nicht; besser restic einrichten)."
+  fi
+  step "Neuen Stand holen"
+  local before
+  before=$(git -C "$WIKI_DIR" rev-parse --short HEAD)
+  git -C "$WIKI_DIR" fetch --tags --quiet
+  if [[ -n $ref ]]; then
+    git -C "$WIKI_DIR" checkout --quiet "$ref"
+  fi
+  if git -C "$WIKI_DIR" symbolic-ref -q HEAD >/dev/null; then
+    git -C "$WIKI_DIR" pull --ff-only --quiet
+  fi
+  info "Stand: $before → $(git -C "$WIKI_DIR" rev-parse --short HEAD)"
+  step "Bauen und neu starten"
+  compose build --pull
+  compose up -d --remove-orphans
+  if wait_healthy 300; then
+    ok "Update abgeschlossen."
+  else
+    compose logs --tail 40 api
+    die "Die API ist nach dem Update nicht gesund. Zurück zum alten Stand: sudo wikictl update $before (Datenbank ggf. mit wikictl restore)."
+  fi
+  docker image prune -f >/dev/null || true
+  if systemctl is-active --quiet fail2ban 2>/dev/null; then
+    # Neue Container schreiben in neue Logdateien; fail2ban liest die Dateiliste nur beim Laden
+    fail2ban-client reload wikifordummys >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_backup_init() {
+  need_root
+  need_env
+  restic_env || die "Kein Sicherungsziel in .env (BACKUP_REPOSITORY, BACKUP_PASSWORD)."
+  command -v restic >/dev/null || die "restic fehlt: sudo apt install restic"
+  if [[ $RESTIC_REPOSITORY == /* ]]; then
+    install -d -m 700 "$RESTIC_REPOSITORY"
+  fi
+  if restic cat config >/dev/null 2>&1; then
+    ok "Sicherungsziel $RESTIC_REPOSITORY ist bereit."
+  else
+    restic init >/dev/null
+    ok "Sicherungsziel $RESTIC_REPOSITORY angelegt."
+  fi
+}
+
+cmd_backup() {
+  need_root
+  need_env
+  restic_env || die "Kein Sicherungsziel in .env (BACKUP_REPOSITORY, BACKUP_PASSWORD). Einrichten mit: sudo ./install.sh"
+  local ping
+  ping=$(env_get BACKUP_PING_URL)
+  if ! backup_run; then
+    if [[ -n $ping ]]; then ping_url "$ping/fail"; fi
+    die "Sicherung fehlgeschlagen."
+  fi
+  if [[ -n $ping ]]; then ping_url "$ping"; fi
+  return 0
+}
+
+# backup_run [vor-wiederherstellung]: mit Argument ein eigener Stand, der beim Ausdünnen nicht mitzählt
+backup_run() {
+  local tag=${1:-wikifordummys}
+  (
+    set -Eeuo pipefail
+    install -d -m 700 "$STAGING"
+    step "Datenbank exportieren"
+    # Unkomprimiertes SQL, damit restic zwischen den Ständen deduplizieren kann
+    compose exec -T db pg_dump -U wiki --clean --if-exists --no-owner wiki >"$STAGING/wiki.sql.tmp"
+    mv "$STAGING/wiki.sql.tmp" "$STAGING/wiki.sql"
+    cp -p "$ENV_FILE" "$STAGING/env"
+    git -C "$WIKI_DIR" rev-parse HEAD >"$STAGING/version" 2>/dev/null || true
+    local attachments caddy
+    attachments=$(volume_path attachments) || die "Volume ${COMPOSE_PROJECT}_attachments fehlt."
+    caddy=$(volume_path caddy_data) || caddy=''
+    step "Sichern nach $RESTIC_REPOSITORY"
+    local paths=("$STAGING" "$attachments")
+    if [[ -n $caddy ]]; then paths+=("$caddy"); fi
+    restic backup --tag "$tag" --host "$(hostname)" "${paths[@]}"
+    if [[ $tag == wikifordummys ]]; then
+      step "Alte Stände ausdünnen (7 täglich, 4 wöchentlich, 6 monatlich)"
+      restic forget --tag wikifordummys "${RETENTION[@]}" --prune --quiet
+    fi
+    rm -f "$STAGING/wiki.sql"
+    ok "Sicherung abgeschlossen."
+  )
+}
+
+cmd_snapshots() {
+  need_root
+  need_env
+  restic_env || die "Kein Sicherungsziel eingerichtet."
+  restic snapshots
+}
+
+# Holt einen Stand in ein temporäres Verzeichnis; Ausgabe: Verzeichnis mit staging/, attachments/, caddy_data/
+restore_to_dir() {
+  local id=$1 target=$2 attachments caddy src
+  if [[ $id == latest ]]; then
+    id=$(restic snapshots --tag wikifordummys --latest 1 --json | grep -o '"short_id":"[^"]*"' | tail -1 | cut -d'"' -f4)
+    [[ -n $id ]] || die "Es gibt noch keine Sicherung."
+    info "Neuester Stand: $id"
+  fi
+  restic restore "$id" --target "$target/raw" >/dev/null
+  install -d "$target/staging" "$target/attachments" "$target/caddy_data"
+  # In der Sicherung stehen die Originalpfade; die Volumes können auf einem neuen Server woanders liegen
+  src=$(restic ls "$id" --json 2>/dev/null | grep -o '"path":"[^"]*_attachments/_data"' | head -1 | cut -d'"' -f4) || true
+  attachments=${src:-}
+  src=$(restic ls "$id" --json 2>/dev/null | grep -o '"path":"[^"]*_caddy_data/_data"' | head -1 | cut -d'"' -f4) || true
+  caddy=${src:-}
+  local staging_src
+  staging_src=$(restic ls "$id" --json 2>/dev/null | grep -o '"path":"[^"]*/wiki.sql"' | head -1 | cut -d'"' -f4) || true
+  [[ -n $staging_src ]] || die "In der Sicherung $id fehlt der Datenbankexport."
+  cp -a "$target/raw$(dirname "$staging_src")/." "$target/staging/"
+  if [[ -n $attachments && -d $target/raw$attachments ]]; then cp -a "$target/raw$attachments/." "$target/attachments/"; fi
+  if [[ -n $caddy && -d $target/raw$caddy ]]; then cp -a "$target/raw$caddy/." "$target/caddy_data/"; fi
+  rm -rf "$target/raw"
+}
+
+cmd_restore() {
+  need_root
+  need_env
+  local id='' with_env=0 yes=0
+  while (($#)); do
+    case $1 in
+      --with-env) with_env=1 ;;
+      --yes) yes=1 ;;
+      -*) die "Unbekannte Option $1" ;;
+      *) id=$1 ;;
+    esac
+    shift
+  done
+  [[ -n $id ]] || die "Welcher Stand? wikictl restore latest oder eine ID aus wikictl snapshots"
+  restic_env || die "Kein Sicherungsziel eingerichtet."
+  warn "Die aktuelle Datenbank und alle Anhänge werden durch den Stand $id ersetzt."
+  if ((!yes)); then
+    local answer
+    read -r -p "Zum Fortfahren WIEDERHERSTELLEN eingeben: " answer
+    [[ $answer == WIEDERHERSTELLEN ]] || die "Abgebrochen."
+  fi
+  RESTORE_TMP=$(mktemp -d /var/tmp/wiki-restore.XXXXXX)
+  trap 'rm -rf "$RESTORE_TMP"' EXIT
+  local tmp=$RESTORE_TMP
+  step "Stand $id holen"
+  restore_to_dir "$id" "$tmp"
+
+  if ((with_env)); then
+    cp -p "$ENV_FILE" "$ENV_FILE.vor-restore"
+    install -m 600 "$tmp/staging/env" "$ENV_FILE"
+    ok ".env aus der Sicherung übernommen (bisherige in .env.vor-restore)."
+  elif [[ $(env_get ENCRYPTION_KEY "$tmp/staging/env") != "$(env_get ENCRYPTION_KEY)" ]]; then
+    warn "ENCRYPTION_KEY in der Sicherung unterscheidet sich von der aktuellen .env: Zwei-Faktor-Anmeldung und"
+    warn "SMTP-Passwort aus der Administration funktionieren dann nicht. Auf einem neuen Server --with-env verwenden."
+  fi
+
+  # Vor dem Zurückspielen den aktuellen Stand sichern (sofern es ihn gibt)
+  if compose ps -q db 2>/dev/null | grep -q . && ((!with_env)); then
+    step "Aktuellen Stand vorher sichern"
+    backup_run vor-wiederherstellung || warn "Sicherung des aktuellen Stands fehlgeschlagen; fahre trotzdem fort."
+  fi
+
+  step "Dienste anhalten"
+  compose stop caddy web api >/dev/null 2>&1 || true
+  step "Datenbank neu anlegen und einspielen"
+  # Frisches Volume, damit das Datenbankpasswort zur (ggf. übernommenen) .env passt
+  compose rm -sf db >/dev/null
+  docker volume rm -f "${COMPOSE_PROJECT}_pgdata" >/dev/null
+  compose up -d db redis
+  local i
+  for i in $(seq 1 60); do
+    compose exec -T db pg_isready -U wiki -d wiki >/dev/null 2>&1 && break
+    sleep 2
+  done
+  compose exec -T db psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <"$tmp/staging/wiki.sql" >/dev/null
+  ok "Datenbank eingespielt."
+
+  step "Anhänge und Zertifikate zurückspielen"
+  compose create api caddy >/dev/null 2>&1 || true
+  local vol
+  vol=$(volume_path attachments)
+  find "$vol" -mindepth 1 -delete
+  cp -a "$tmp/attachments/." "$vol/"
+  if [[ -n $(ls -A "$tmp/caddy_data" 2>/dev/null) ]]; then
+    vol=$(volume_path caddy_data)
+    find "$vol" -mindepth 1 -delete
+    cp -a "$tmp/caddy_data/." "$vol/"
+  fi
+  ok "Dateien zurückgespielt."
+
+  step "Starten"
+  # Sitzungen und Sperren gehören zum alten Stand
+  # shellcheck disable=SC2016 # $REDIS_PASSWORD wird im Container aufgelöst
+  compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL' >/dev/null || true
+  compose up -d
+  wait_healthy 300 || die "Die API ist nach der Wiederherstellung nicht gesund; Logs: wikictl logs api"
+  ok "Wiederherstellung abgeschlossen. Alle Benutzer müssen sich neu anmelden."
+}
+
+cmd_restore_test() {
+  need_root
+  need_env
+  restic_env || die "Kein Sicherungsziel eingerichtet."
+  local ping
+  ping=$(env_get BACKUP_PING_URL)
+  if restore_test_run; then
+    return 0
+  fi
+  if [[ -n $ping ]]; then ping_url "$ping/fail"; fi
+  die "Test-Wiederherstellung fehlgeschlagen."
+}
+
+restore_test_run() {
+  (
+    set -Eeuo pipefail
+    local tmp name
+    tmp=$(mktemp -d /var/tmp/wiki-restore-test.XXXXXX)
+    name=wikifordummys-restore-test-$$
+    trap 'docker rm -f "$name" >/dev/null 2>&1; rm -rf "$tmp"' EXIT
+    step "Prüfe die Integrität des Sicherungsziels (Stichprobe)"
+    restic check --read-data-subset=5% --quiet
+    step "Letzten Stand in ein temporäres Verzeichnis holen"
+    restore_to_dir latest "$tmp"
+    step "Datenbank in einen Wegwerf-Container einspielen"
+    docker run -d --name "$name" --network none --tmpfs /var/lib/postgresql/data \
+      -e POSTGRES_USER=wiki -e POSTGRES_DB=wiki -e POSTGRES_PASSWORD=test postgres:16 >/dev/null
+    local i
+    for i in $(seq 1 60); do
+      docker exec "$name" pg_isready -U wiki -d wiki >/dev/null 2>&1 && break
+      sleep 2
+    done
+    # pg_isready meldet schon während des Init-Laufs bereit; kurz auf den endgültigen Start warten
+    sleep 3
+    for i in $(seq 1 30); do
+      docker exec "$name" psql -U wiki -d wiki -c 'SELECT 1' >/dev/null 2>&1 && break
+      sleep 2
+    done
+    docker exec -i "$name" psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <"$tmp/staging/wiki.sql" >/dev/null
+    local counts
+    counts=$(docker exec "$name" psql -At -U wiki -d wiki -c \
+      "SELECT (SELECT count(*) FROM users) || ' Benutzer, ' || (SELECT count(*) FROM spaces) || ' Spaces, ' || (SELECT count(*) FROM pages) || ' Seiten, ' || (SELECT count(*) FROM attachments) || ' Anhänge'")
+    info "Inhalt: $counts"
+    # Jeder Anhang muss mit der Prüfsumme aus der Datenbank vorhanden sein (Ablage: <erste 2 Zeichen>/<schlüssel>)
+    local broken=0 key sum file
+    while IFS='|' read -r key sum; do
+      [[ -z $key ]] && continue
+      file=$tmp/attachments/${key:0:2}/$key
+      if [[ ! -f $file ]]; then
+        broken=$((broken + 1))
+        warn "Anhang fehlt in der Sicherung: $key"
+      elif [[ $(sha256sum "$file" | cut -d' ' -f1) != "$sum" ]]; then
+        broken=$((broken + 1))
+        warn "Anhang beschädigt (Prüfsumme): $key"
+      fi
+    done < <(docker exec "$name" psql -At -U wiki -d wiki -c "SELECT storage_key, sha256 FROM attachments")
+    ((broken == 0)) || die "$broken Anhänge fehlen oder sind beschädigt."
+    [[ -s $tmp/staging/env ]] || die ".env fehlt in der Sicherung."
+    ok "Test-Wiederherstellung erfolgreich: $counts, alle Anhänge vollständig."
+  )
+}
+
+cmd_monitor() {
+  need_env
+  local url state
+  url=$(env_get MONITOR_PING_URL)
+  state=$(compose exec -T api node -e "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>r.json()).then(b=>console.log(b.status+' '+JSON.stringify(b.checks)),()=>console.log('fehler'))" 2>/dev/null || echo fehler)
+  if [[ $state == ok* ]]; then
+    if [[ $state == *knapp* ]]; then warn "Speicherplatz wird knapp: $state"; fi
+    ping_url "$url"
+    return 0
+  fi
+  warn "Wiki nicht gesund: $state"
+  if [[ -n $url ]]; then ping_url "$url/fail"; fi
+  return 1
+}
+
+cmd_ca_cert() {
+  need_env
+  [[ $(env_get WIKI_TLS) == internal ]] || warn "Die Betriebsart ist nicht internal; das Zertifikat wird von Let's Encrypt bzw. dem Proxy ausgestellt."
+  compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt
+}
+
+main() {
+  local cmd=${1:-help}
+  if (($#)); then shift; fi
+  case $cmd in
+    status) cmd_status ;;
+    logs) cmd_logs "$@" ;;
+    start) need_env && compose up -d ;;
+    stop) need_env && compose stop ;;
+    restart) need_env && compose restart "$@" ;;
+    update) cmd_update "$@" ;;
+    reconfigure) exec "$WIKI_DIR/install.sh" "$@" ;;
+    create-admin) need_env && compose exec -T api node dist/cli.js create-admin "$@" ;;
+    mail-test) need_env && compose exec -T api node dist/cli.js mail-test "$@" ;;
+    backup) cmd_backup ;;
+    backup-init) cmd_backup_init ;;
+    snapshots) cmd_snapshots ;;
+    restore) cmd_restore "$@" ;;
+    restore-test) cmd_restore_test ;;
+    monitor) cmd_monitor ;;
+    ca-cert) cmd_ca_cert ;;
+    help | -h | --help) usage ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

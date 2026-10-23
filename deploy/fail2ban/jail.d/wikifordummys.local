@@ -1,0 +1,16 @@
+# Wird von install.sh nach /etc/fail2ban/jail.d/ kopiert.
+# Ergänzt die Rate-Limits der API (S3): wer 10-mal in 10 Minuten scheitert, wird für eine Stunde
+# auf Firewall-Ebene gesperrt. Docker leitet veröffentlichte Ports an der INPUT-Kette vorbei,
+# deshalb sperrt die Regel in der Kette DOCKER-USER.
+[wikifordummys]
+enabled = true
+filter = wikifordummys
+logpath = /var/lib/docker/containers/*/*-json.log
+backend = auto
+# Private Netze nie sperren: Über Dockers userland-proxy (z. B. IPv6-Zugriffe) erscheint sonst die
+# Gateway-Adresse des Docker-Netzes als Absender, und eine Sperre träfe alle Benutzer.
+ignoreip = 127.0.0.0/8 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+maxretry = 10
+findtime = 10m
+bantime = 1h
+banaction = iptables-allports[chain="DOCKER-USER", actionstart_on_demand=true]

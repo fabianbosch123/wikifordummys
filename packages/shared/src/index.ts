@@ -261,3 +261,35 @@ export interface SearchResultDto {
 }
 
 export const SEARCH_PAGE_SIZE = 20;
+
+// ---------- Meilenstein 4: Mailversand ----------
+
+/** tls = SSL/TLS ab Verbindungsbeginn (meist Port 465), starttls = Upgrade nach dem Verbindungsaufbau (meist 587) */
+export type SmtpSecurity = 'tls' | 'starttls' | 'none';
+export const SMTP_SECURITY: readonly SmtpSecurity[] = ['tls', 'starttls', 'none'];
+
+export interface MailSettingsDto {
+  /** admin = in der Administration gespeichert (Vorrang), env = SMTP_URL aus .env, none = kein Versand */
+  source: 'admin' | 'env' | 'none';
+  host: string;
+  port: number;
+  security: SmtpSecurity;
+  username: string;
+  hasPassword: boolean;
+  from: string;
+  /** In .env ist ein SMTP-Zugang hinterlegt, auf den sich zurückschalten lässt */
+  envConfigured: boolean;
+  updatedAt: string | null;
+}
+
+export interface MailSettingsInput {
+  host: string;
+  port: number;
+  security: SmtpSecurity;
+  username?: string;
+  /** Weglassen behält das bisherige Passwort */
+  password?: string;
+  from: string;
+  /** Verbindung vor dem Speichern nicht prüfen */
+  skipVerify?: boolean;
+}

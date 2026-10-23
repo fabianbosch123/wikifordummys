@@ -3,15 +3,25 @@
 Selbst gehostetes, Confluence-ähnliches Wiki mit integrierter Benutzerverwaltung für Ubuntu.
 Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, pflegt es gemeinsam und findet es über die Volltextsuche.
 
-**Stand: Meilenstein 3 (Rechte, Anhänge, Suche).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1), Spaces, Seitenbaum, Editor und Versionen (M2) sowie Rollen je Space, Seiteneinschränkungen, Anhänge und Volltextsuche (M3) sind fertig. Als Nächstes folgt der Go-live (M4).
+**Stand: Meilenstein 4 (Go-live).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1), Spaces, Seitenbaum, Editor und Versionen (M2), Rollen je Space, Seiteneinschränkungen, Anhänge und Volltextsuche (M3) sowie Installer, Sicherung, Überwachung und Betriebswerkzeuge (M4) sind fertig. Nach dem Pilotbetrieb folgt Meilenstein 5 (Zusammenarbeit).
+
+**Installation in Kürze** (Ubuntu 22.04/24.04, VPS oder eigener Server):
+
+```bash
+sudo git clone https://github.com/fabianbosch123/wikifordummys.git /opt/wikifordummys
+cd /opt/wikifordummys && sudo ./install.sh
+```
+
+Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Sicherungsziel ab. Details: [docs/installation.md](docs/installation.md), Betrieb: [docs/betrieb.md](docs/betrieb.md), Abnahme: [docs/go-live.md](docs/go-live.md).
 
 ## Inhalt
 
 - [Funktionen in Meilenstein 1](#funktionen-in-meilenstein-1)
 - [Funktionen in Meilenstein 2](#funktionen-in-meilenstein-2)
 - [Funktionen in Meilenstein 3](#funktionen-in-meilenstein-3)
+- [Funktionen in Meilenstein 4](#funktionen-in-meilenstein-4)
 - [Aufbau](#aufbau)
-- [Betrieb auf Ubuntu 24.04](#betrieb-auf-ubuntu-2404)
+- [Betrieb](#betrieb)
 - [Lokale Entwicklung](#lokale-entwicklung)
 - [Tests](#tests)
 - [Sicherheit](#sicherheit)
@@ -46,6 +56,17 @@ Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, p
 - **Anhänge** je Seite (bis 50 MB, einstellbar über `ATTACHMENT_MAX_MB`): Bilder mit Vorschau, PDF öffnet im Browser, alles andere wird heruntergeladen. Im Editor lassen sich Bilder direkt hochladen und einbinden. Anhänge liegen im Volume `attachments` unter zufälligem Namen.
 - **Volltextsuche** über Titel und Inhalt mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben, Filter nach Space; immer nur über Seiten, die man sehen darf. Suchfeld oben in der Kopfzeile.
 
+## Funktionen in Meilenstein 4
+
+- **Installer `install.sh`** für Ubuntu: fragt Domain, Betriebsart, SMTP-Zugang, ersten Administrator, Sicherungsziel und Überwachung ab, erzeugt `.env` mit zufälligen Schlüsseln, installiert bei Bedarf Docker, baut und startet das Wiki, prüft API, Zertifikat und Mailversand (mit Testmail) und gibt den Einladungslink aus. Erneut aufgerufen ändert er die Konfiguration, ohne Schlüssel zu ersetzen; mit `--non-interactive` läuft er ohne Rückfragen.
+- **Drei Betriebsarten** für VPS und eigenen Server: öffentlich mit Let's Encrypt, nur im eigenen Netz mit eigener Zertifizierungsstelle, oder hinter einem vorhandenen Reverse Proxy (nginx, Apache, Traefik), der HTTPS übernimmt. Echte Client-IPs bleiben dabei erhalten.
+- **Mailversand in der Administration** (**Administration → E-Mail**): SMTP-Server, Verschlüsselung, Zugang und Absender ändern, Verbindung vor dem Speichern prüfen, Testmail senden. Hat Vorrang vor `.env`; das Passwort liegt verschlüsselt in der Datenbank. Änderungen und Testmails stehen im Audit-Log.
+- **`wikictl`** für den Betrieb: Status, Logs, Update mit vorheriger Sicherung, Sicherung, Wiederherstellung (auch auf einem neuen Server), Test-Wiederherstellung, Mailtest, Stammzertifikat ausgeben.
+- **Sicherung mit restic** (Datenbank, Anhänge, Zertifikate, `.env`; verschlüsselt, 7/4/6 Stände) an ein lokales Verzeichnis, per SFTP, auf S3 oder einen REST-Server, nächtlich per systemd-Timer; monatlich automatische **Test-Wiederherstellung** in einen Wegwerf-Container mit Prüfsummenkontrolle aller Anhänge.
+- **Überwachung**: Healthchecks für API und Weboberfläche, Push an Uptime Kuma oder healthchecks.io alle 5 Minuten und nach jeder Sicherung.
+- **Härtung**: optional ufw, automatische Sicherheitsupdates und fail2ban (sperrt IPs nach wiederholten Fehlanmeldungen in der Docker-Kette).
+- **CI**: Probeinstallation mit dem Installer in den Betriebsarten `internal` und `proxy`, danach Sicherung, Test-Wiederherstellung und Wiederherstellung, plus OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
+
 ## Aufbau
 
 ```
@@ -55,7 +76,9 @@ apps/
 packages/
   shared/     Gemeinsame Typen und Passwortregeln
 e2e/          Ende-zu-Ende-Tests mit Playwright
-deploy/       Caddyfile
+deploy/       caddy/ (Betriebsarten), wikictl, systemd-Timer, fail2ban
+docs/         Installation, Betrieb, Go-live-Checkliste
+install.sh    Installer für Ubuntu
 docker-compose.yml       Betrieb (Caddy, Web, API, PostgreSQL, Redis)
 docker-compose.dev.yml   Entwicklung (PostgreSQL, Redis, Mailpit)
 ```
@@ -73,118 +96,15 @@ Jede Anfrage läuft über Caddy: `/api/*` geht an die API, alles andere an die W
 | Reverse Proxy | Caddy 2 mit automatischem Let’s-Encrypt-Zertifikat |
 | Tests | Vitest (Unit und Integration), Playwright (Ende-zu-Ende) |
 
-## Betrieb auf Ubuntu 24.04
+## Betrieb
 
 Für 10 bis 20 Benutzer reicht ein Server oder VPS mit 2 vCPU, 4 GB RAM und 40 GB SSD (Richtwert, nicht gemessen).
 
-### 1. Server vorbereiten
+- **Installation:** `sudo ./install.sh`, siehe [docs/installation.md](docs/installation.md) (Betriebsarten, Proxy-Beispiele, Mail-Anbieter, Installation ohne Rückfragen, Installation von Hand).
+- **Betrieb:** `sudo wikictl status | update | backup | restore | restore-test | logs`, siehe [docs/betrieb.md](docs/betrieb.md) (Updates, Sicherung, Wiederherstellung auf neuem Server, Überwachung, fail2ban).
+- **Abnahme und Pilot:** [docs/go-live.md](docs/go-live.md).
 
-```bash
-# Eigenen Benutzer mit sudo verwenden, SSH nur mit Schlüssel, Root-Login aus
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y unattended-upgrades git
-sudo dpkg-reconfigure -plow unattended-upgrades
-
-# Firewall: nur SSH, HTTP und HTTPS
-sudo ufw allow OpenSSH
-sudo ufw allow 80,443/tcp
-sudo ufw allow 443/udp
-sudo ufw enable
-```
-
-### 2. Docker installieren
-
-Docker Engine und das Compose-Plugin aus dem offiziellen Docker-Repository ([Anleitung](https://docs.docker.com/engine/install/ubuntu/)):
-
-```bash
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker $USER   # danach einmal ab- und wieder anmelden
-```
-
-### 3. DNS
-
-Einen DNS-Eintrag (A bzw. AAAA) für die gewünschte Domain, z. B. `wiki.example.de`, auf die öffentliche IP des Servers setzen. Caddy holt das Zertifikat beim ersten Start automatisch.
-
-### 4. Code holen und konfigurieren
-
-```bash
-sudo mkdir -p /opt/wikifordummys && sudo chown $USER /opt/wikifordummys
-git clone https://github.com/fabianbosch123/wikifordummys.git /opt/wikifordummys
-cd /opt/wikifordummys
-
-cp .env.example .env
-chmod 600 .env
-# Geheimnisse erzeugen und in .env eintragen (DB_PASSWORD, REDIS_PASSWORD, ENCRYPTION_KEY, SESSION_SECRET)
-for i in 1 2 3 4; do openssl rand -hex 32; done
-nano .env
-```
-
-Wichtig in `.env`:
-
-- `WIKI_DOMAIN`: die Domain aus Schritt 3.
-- `ENCRYPTION_KEY`: verschlüsselt die 2FA-Geheimnisse. **Sicher aufbewahren und nicht ändern**, sonst müssen alle Benutzer ihre 2FA neu einrichten.
-- `SMTP_URL`: Zugang zum Mailserver, z. B. `smtps://benutzer:passwort@smtp.example.de:465`. Ohne SMTP zeigt die Admin-Oberfläche den Einladungslink zum Weitergeben an, aber „Passwort vergessen“ funktioniert dann nicht. Für den Betrieb daher einen Mailserver eintragen.
-
-### 5. Starten
-
-```bash
-docker compose build        # baut die Images aus dem Quellcode (einige Minuten)
-docker compose up -d
-docker compose ps           # alle Dienste sollten "Up" bzw. "healthy" zeigen
-```
-
-Die API spielt beim Start die Datenbankmigrationen ein. Health-Check: `https://wiki.example.de/api/v1/health`.
-
-### 6. Ersten Administrator anlegen
-
-```bash
-docker compose exec api node dist/cli.js create-admin --email fabian@example.de --name "Fabian"
-```
-
-Der Befehl gibt einen Einladungslink aus (72 Stunden gültig). Im Browser öffnen, Passwort festlegen, 2FA mit einer Authenticator-App einrichten (z. B. Aegis, Google Authenticator, Microsoft Authenticator, 1Password) und die Wiederherstellungscodes sichern. Danach lädt der Admin alle weiteren Personen über **Administration → Benutzer** ein.
-
-### Update
-
-```bash
-cd /opt/wikifordummys
-docker compose exec db pg_dump -U wiki wiki | gzip > ~/wiki-vor-update-$(date +%F).sql.gz
-git pull
-docker compose build
-docker compose up -d
-```
-
-### Backup (vorläufig)
-
-Bis zur automatischen Sicherung mit restic (Meilenstein 4) mindestens nächtlich die Datenbank sichern, z. B. per Cronjob:
-
-```bash
-docker compose -f /opt/wikifordummys/docker-compose.yml exec -T db pg_dump -U wiki wiki | gzip > /var/backups/wiki-$(date +%F).sql.gz
-```
-
-Die Anhänge liegen im Docker-Volume `attachments` und gehören ebenfalls ins Backup, z. B.:
-
-```bash
-docker run --rm -v wikifordummys_attachments:/data:ro -v /var/backups:/backup busybox tar czf /backup/wiki-anhaenge-$(date +%F).tar.gz -C /data .
-```
-
-Zusätzlich die Datei `.env` sicher (verschlüsselt) aufbewahren. Ohne `ENCRYPTION_KEY` sind die 2FA-Geheimnisse aus einem Backup nicht mehr nutzbar.
-
-### Logs
-
-```bash
-docker compose logs -f api
-```
-
-Logs gehen auf stdout und werden von Docker auf 3 × 50 MB je Dienst begrenzt. Fehlgeschlagene Anmeldungen erscheinen zusätzlich als JSON-Zeile (`"audit":"auth.login.failed"` mit IP); darauf kann später fail2ban oder CrowdSec aufsetzen.
-
-### Hinter einem vorhandenen Reverse Proxy
-
-Gibt es schon einen Reverse Proxy, entfällt der Dienst `caddy`. Der vorhandene Proxy muss TLS übernehmen, `/api/*` an die API (Port 3001) und alles andere an die Weboberfläche (Port 3000) weiterleiten, den Header `X-Forwarded-For` setzen und die Security-Header aus `deploy/Caddyfile` ergänzen.
+`ENCRYPTION_KEY` in `.env` verschlüsselt die 2FA-Geheimnisse und das SMTP-Passwort aus der Administration. Er wird nie automatisch ersetzt und ist Teil der Sicherung; zusätzlich gehört das Passwort der Sicherung (`BACKUP_PASSWORD`) an einen Ort außerhalb des Servers.
 
 ## Lokale Entwicklung
 
@@ -196,7 +116,7 @@ pnpm install
 cp .env.example .env
 ```
 
-In `.env` den Block „Nur lokale Entwicklung“ einkommentieren und `ENCRYPTION_KEY` sowie `SESSION_SECRET` setzen (`openssl rand -hex 32`). Dann:
+In `.env` den Block „Nur lokale Entwicklung“ einkommentieren und `ENCRYPTION_KEY` sowie `SESSION_SECRET` setzen (`openssl rand -hex 32`). Für Mailpit `SMTP_URL=smtp://localhost:1025?tls=off` verwenden (`smtp://` verlangt sonst STARTTLS). Dann:
 
 ```bash
 pnpm --filter @wiki/shared build
@@ -224,7 +144,7 @@ pnpm build && pnpm test:e2e    # Ende-zu-Ende im Browser (Chromium)
 
 Die API-Tests nutzen die Datenbank `wiki_test` und Redis-DB 15, die Ende-zu-Ende-Tests `wiki_e2e` und Redis-DB 14; Entwicklungsdaten bleiben unberührt. Die Datenbanken werden bei Bedarf angelegt (der Datenbankbenutzer braucht das Recht `CREATEDB`). Abweichende Adressen über `TEST_DATABASE_URL`, `TEST_REDIS_URL`, `E2E_DATABASE_URL` und `E2E_REDIS_URL`. Für die Ende-zu-Ende-Tests muss Port 3001 frei sein; vorher ggf. `pnpm --filter @wiki/e2e exec playwright install chromium`.
 
-Die CI (`.github/workflows/ci.yml`) führt bei jedem Push Linter, Typprüfung, alle Tests, `pnpm audit`, einen Secret-Scan (Gitleaks) und einen Container-Scan (Trivy) aus.
+Die CI (`.github/workflows/ci.yml`) führt bei jedem Push Linter, Typprüfung, alle Tests, `pnpm audit`, einen Secret-Scan (Gitleaks) und einen Container-Scan (Trivy) aus. Dazu kommt eine Probeinstallation mit `install.sh --non-interactive` in den Betriebsarten `internal` und `proxy` mit Sicherung, Test-Wiederherstellung und Wiederherstellung sowie ein OWASP-ZAP-Baseline-Scan (Bericht als Artefakt `zap-report`). Die Shell-Skripte prüft `shellcheck -x install.sh deploy/wikictl deploy/lib.sh`.
 
 ## Sicherheit
 
@@ -282,12 +202,14 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `GET /attachments/:id[?download=1]`, `DELETE /attachments/:id` | Anhang abrufen, löschen | Leser / Bearbeiter |
 | `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert | angemeldet |
 | `GET /directory` | Aktive Benutzer und Gruppen für die Rechtevergabe (ohne E-Mail) | angemeldet |
+| `GET/PUT/DELETE /admin/settings/mail` | SMTP-Zugang ansehen, prüfen und speichern, auf `.env` zurücksetzen | Systemadmin |
+| `POST /admin/settings/mail/test` | Testmail senden (Standard: an die eigene Adresse) | Systemadmin |
 | `GET /health` | Datenbank, Redis, Speicherplatz | öffentlich |
 
 ## Nächste Meilensteine
 
 | Meilenstein | Inhalt |
 | --- | --- |
-| M4 Go-live | Deployment, Backups mit restic, Monitoring, OWASP-ZAP-Scan, Pilotbetrieb |
+| M4 Go-live | Umgesetzt bis auf den Pilotbetrieb selbst (Checkliste in [docs/go-live.md](docs/go-live.md)) |
 | M5 Zusammenarbeit | Kommentare, Benachrichtigungen, Vorlagen, Labels; Hintergrund-Worker (BullMQ) für Mails und ggf. Volltext aus PDF-Anhängen |
 | M6 Ausbau | Gleichzeitiges Bearbeiten, Export, API-Tokens, Webhooks |

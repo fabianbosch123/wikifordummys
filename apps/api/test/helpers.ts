@@ -35,7 +35,7 @@ export async function startApp(): Promise<TestContext> {
 /** Leert alle Tabellen außer den Systemgruppen und die Test-Redis-DB. */
 export async function resetState(ctx: TestContext) {
   await ctx.prisma.$executeRaw`ALTER TABLE audit_log DISABLE TRIGGER audit_log_no_update`;
-  await ctx.prisma.$executeRaw`TRUNCATE attachments, page_restrictions, space_permissions, page_versions, pages, spaces, audit_log, recovery_codes, invitations, password_resets, group_members, users CASCADE`;
+  await ctx.prisma.$executeRaw`TRUNCATE settings, attachments, page_restrictions, space_permissions, page_versions, pages, spaces, audit_log, recovery_codes, invitations, password_resets, group_members, users CASCADE`;
   await ctx.prisma.$executeRaw`ALTER TABLE audit_log ENABLE TRIGGER audit_log_no_update`;
   await ctx.prisma.group.deleteMany({ where: { system: false } });
   // Globale Rechte der Systemgruppen wie nach der Migration
@@ -45,6 +45,7 @@ export async function resetState(ctx: TestContext) {
     ON CONFLICT DO NOTHING`;
   await ctx.redis.flushdb();
   ctx.mail.outbox.length = 0;
+  await ctx.mail.reload();
 }
 
 /** Browser-ähnlicher Client: Cookies, CSRF-Header und Origin werden automatisch gesetzt. */

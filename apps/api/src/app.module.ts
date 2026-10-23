@@ -31,6 +31,7 @@ import { PagesService } from './pages/pages.service';
 import { RestrictionsService } from './pages/restrictions.service';
 import { SearchController } from './search/search.controller';
 import { SearchService } from './search/search.service';
+import { SettingsController } from './settings/settings.controller';
 import { PermissionService } from './spaces/permission.service';
 import { SpacesController } from './spaces/spaces.controller';
 import { SpacesService } from './spaces/spaces.service';
@@ -49,6 +50,7 @@ export class AppModule implements NestModule {
         AttachmentsController,
         SearchController,
         DirectoryController,
+        SettingsController,
         HealthController,
       ],
       providers: [
@@ -82,7 +84,7 @@ export class AppModule implements NestModule {
         SearchService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
-      exports: [PrismaService, AuthService, AuditService, UserAccessService, REDIS],
+      exports: [PrismaService, AuthService, AuditService, UserAccessService, MailService, REDIS],
     };
   }
 

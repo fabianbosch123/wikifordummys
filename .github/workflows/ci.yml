@@ -92,3 +92,61 @@ jobs:
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.65.0 \
             image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress wikifordummys-${{ matrix.app }}:ci
+
+  # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung
+  # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz
+  install:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [internal, proxy]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: shellcheck -x install.sh deploy/wikictl deploy/lib.sh
+      - name: Installation (ohne Rückfragen)
+        run: |
+          sudo WIKI_TLS=${{ matrix.mode }} WIKI_DOMAIN=wiki.localtest PROXY_SAME_HOST=j \
+            SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI \
+            BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic \
+            INSTALL_UNATTENDED=n INSTALL_UFW=n INSTALL_FAIL2BAN=n \
+            ./install.sh --non-interactive
+      - name: Erneuter Aufruf behält Schlüssel
+        run: |
+          before=$(sudo grep ENCRYPTION_KEY .env)
+          sudo WIKI_TLS=${{ matrix.mode }} WIKI_DOMAIN=wiki.localtest PROXY_SAME_HOST=j SMTP_ENABLE=n ADMIN_CREATE=n \
+            BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic \
+            ./install.sh --non-interactive --config-only
+          test "$before" = "$(sudo grep ENCRYPTION_KEY .env)"
+      - name: Status, Sicherung, Test-Wiederherstellung, Wiederherstellung
+        run: |
+          sudo wikictl status
+          sudo wikictl backup
+          sudo wikictl restore-test
+          sudo wikictl restore latest --yes
+          sudo wikictl monitor
+      - name: Erreichbarkeit über Caddy
+        run: |
+          if [ "${{ matrix.mode }}" = proxy ]; then
+            curl -fsS -H 'Host: wiki.localtest' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8080/api/v1/health
+          else
+            curl -fsS -k --resolve wiki.localtest:443:127.0.0.1 https://wiki.localtest/api/v1/health
+          fi
+      - name: OWASP ZAP Baseline-Scan
+        if: matrix.mode == 'internal'
+        run: |
+          chmod 777 .zap
+          docker run --rm --network host --add-host wiki.localtest:127.0.0.1 -v "$PWD/.zap:/zap/wrk:rw" \
+            zaproxy/zap-stable:2.16.1 zap-baseline.py -t https://wiki.localtest -c rules.tsv -I \
+            -r zap-report.html -J zap-report.json
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.mode == 'internal'
+        with:
+          name: zap-report
+          path: .zap/zap-report.*
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Logs bei Fehlern
+        if: failure()
+        run: sudo docker compose logs --tail 200

@@ -1,0 +1,11 @@
+[Unit]
+Description=wikifordummys: Sicherung mit restic
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wikictl backup
+Nice=10
+IOSchedulingClass=idle

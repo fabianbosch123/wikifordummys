@@ -1,0 +1,3 @@
+# Deutsche Anführungszeichen („…“) in Texten sind gewollt
+disable=SC1111
+external-sources=true
