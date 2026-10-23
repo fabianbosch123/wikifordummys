@@ -6,10 +6,12 @@ import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/r
 import StarterKit from '@tiptap/starter-kit';
 import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
+import type { EditorView } from '@tiptap/pm/view';
 import { ChangeEvent, ReactNode, useRef, useState } from 'react';
 import { errorMessage, uploadAttachment } from '@/lib/api';
 import { flattenTree } from '@/lib/tree';
 import { Callout } from './callout';
+import { pendingFile, placeholderNode, type UploadStore } from './uploads';
 
 export const editorExtensions = [
   StarterKit.configure({
@@ -293,19 +295,34 @@ function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto
 /**
  * WYSIWYG-Editor auf Basis von TipTap. Gespeichert wird das JSON-Dokument; die API prüft es (S6).
  * Eingefügtes HTML wird vorher mit DOMPurify bereinigt.
+ * Hineingezogene oder aus der Zwischenablage eingefügte Dateien werden Anhänge der Seite:
+ * Bilder erscheinen als Bild, alles andere als Link an der Einfügestelle.
  */
 export function WikiEditor({
   initial,
   pages,
   pageId,
+  uploads,
   onChange,
 }: {
   initial: DocNode;
   pages: TreeNodeDto[];
-  /** Bestehende Seite: Bilder lassen sich als Anhang hochladen */
+  /** Bestehende Seite: Dateien werden sofort hochgeladen, sonst erst beim Anlegen der Seite */
   pageId?: string;
+  uploads: UploadStore;
   onChange: (doc: DocNode) => void;
 }) {
+  const self = useRef<Editor | null>(null);
+
+  function insertFiles(view: EditorView, files: File[], pos: number) {
+    const e = self.current;
+    if (!e || !view.editable) return;
+    const items = files.map(pendingFile);
+    for (const p of items) uploads.files.set(p.placeholder, p.file);
+    e.chain().focus().insertContentAt(pos, items.map(placeholderNode)).run();
+    if (pageId) for (const p of items) void uploads.upload(e, pageId, p);
+  }
+
   const editor = useEditor({
     extensions: editorExtensions,
     content: initial,
@@ -313,10 +330,26 @@ export function WikiEditor({
     editorProps: {
       attributes: { class: 'rich editor-content', 'aria-label': 'Seiteninhalt', role: 'textbox', 'aria-multiline': 'true' },
       transformPastedHTML: (html) => DOMPurify.sanitize(html, { FORBID_TAGS: ['style', 'form', 'input'], FORBID_ATTR: ['style'] }),
+      handleDrop: (view, event, _slice, moved) => {
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        if (moved || files.length === 0) return false;
+        event.preventDefault();
+        const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from;
+        insertFiles(view, files, pos);
+        return true;
+      },
+      handlePaste: (view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []);
+        // Aus Word & Co. kommt neben dem Text oft ein Bild davon mit; dann gilt der Text
+        if (files.length === 0 || event.clipboardData?.types.includes('text/html')) return false;
+        insertFiles(view, files, view.state.selection.from);
+        return true;
+      },
     },
     onUpdate: ({ editor: e }) => onChange(e.getJSON() as DocNode),
   });
 
+  self.current = editor;
   if (!editor) return <p className="muted">Editor wird geladen …</p>;
   return (
     <div className="editor">

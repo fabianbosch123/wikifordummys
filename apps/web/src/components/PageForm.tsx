@@ -4,6 +4,7 @@ import type { DocNode, PageDto, TreeNodeDto } from '@wiki/shared';
 import { PAGE_TITLE_MAX_LENGTH } from '@wiki/shared';
 import dynamic from 'next/dynamic';
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { resolveUploads, UploadStore } from '@/components/editor/uploads';
 import { Alert } from '@/components/ui';
 import { ApiError, errorMessage } from '@/lib/api';
 
@@ -17,11 +18,14 @@ interface Props {
   initialTitle: string;
   initialContent: DocNode;
   tree: TreeNodeDto[];
-  /** Bei bestehenden Seiten: erlaubt das Hochladen von Bildern */
+  /** Bei bestehenden Seiten: Dateien werden sofort als Anhang hochgeladen */
   pageId?: string;
   submitLabel: string;
-  /** Speichert; liefert ApiError mit Code CONFLICT, wenn jemand anderes inzwischen gespeichert hat */
-  onSubmit: (title: string, content: DocNode, force: boolean) => Promise<void>;
+  /**
+   * Speichert; liefert ApiError mit Code CONFLICT, wenn jemand anderes inzwischen gespeichert hat.
+   * Neue Seite: files enthält die eingefügten Dateien (Platzhalter im Inhalt → Datei), die nach dem Anlegen hochzuladen sind.
+   */
+  onSubmit: (title: string, content: DocNode, force: boolean, files: Map<string, File>) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -33,6 +37,9 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState<PageDto | null>(null);
+  const [uploading, setUploading] = useState(0);
+  const [uploads] = useState(() => new UploadStore(setUploading));
+  const [hasPending, setHasPending] = useState(false);
 
   useEffect(() => {
     if (!dirty) return;
@@ -42,10 +49,14 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
   }, [dirty]);
 
   async function save(force = false) {
+    // Halb hochgeladene Dateien hätten nur Platzhalter im Inhalt
+    if (uploads.busy) return;
     setBusy(true);
     setError('');
     try {
-      await onSubmit(title, content.current, force);
+      const doc = content.current;
+      if (pageId) await onSubmit(title, resolveUploads(doc, uploads.done), force, new Map());
+      else await onSubmit(title, doc, force, uploads.pendingIn(doc));
       setDirty(false);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'CONFLICT') {
@@ -92,11 +103,14 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
         initial={initialContent}
         pages={tree}
         pageId={pageId}
+        uploads={uploads}
         onChange={(doc) => {
           content.current = doc;
           setDirty(true);
+          if (!pageId) setHasPending(uploads.pendingIn(doc).size > 0);
         }}
       />
+      {hasPending && <p className="muted">Eingefügte Dateien werden beim Anlegen der Seite als Anhang hochgeladen.</p>}
       {conflict && (
         <div className="alert error" role="alert">
           <p>
@@ -116,7 +130,7 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
       )}
       <Alert>{error}</Alert>
       <div className="row">
-        <button type="submit" disabled={busy}>
+        <button type="submit" disabled={busy || uploading > 0}>
           {submitLabel}
         </button>
         <button
@@ -128,7 +142,13 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
         >
           Abbrechen
         </button>
-        {dirty && <span className="muted">Ungespeicherte Änderungen</span>}
+        {uploading > 0 ? (
+          <span className="muted" role="status">
+            Dateien werden hochgeladen …
+          </span>
+        ) : (
+          dirty && <span className="muted">Ungespeicherte Änderungen</span>
+        )}
       </div>
     </form>
   );
