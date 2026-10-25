@@ -638,20 +638,9 @@ start_stack() {
 }
 
 check_through_caddy() {
-  local url opts=(-fsS -m 10 -o /dev/null --noproxy "*")
-  case $WIKI_TLS in
-    proxy)
-      url="http://${WIKI_HTTP_PORT%:*}"
-      [[ $WIKI_HTTP_PORT == *:* ]] || url="http://127.0.0.1"
-      url+=":${WIKI_HTTP_PORT##*:}/api/v1/health"
-      opts+=(-H "Host: $WIKI_DOMAIN")
-      ;;
-    internal) url="https://$WIKI_DOMAIN/api/v1/health" opts+=(-k --resolve "$WIKI_DOMAIN:443:127.0.0.1") ;;
-    letsencrypt) url="https://$WIKI_DOMAIN/api/v1/health" opts+=(--resolve "$WIKI_DOMAIN:443:127.0.0.1") ;;
-  esac
   local i
   for i in $(seq 1 20); do
-    if curl "${opts[@]}" "$url" 2>/dev/null; then
+    if curl_caddy /api/v1/health -o /dev/null 2>/dev/null; then
       ok "Caddy liefert das Wiki aus."
       return 0
     fi

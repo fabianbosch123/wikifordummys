@@ -127,7 +127,9 @@ jobs:
             SMTP_ENABLE=n ADMIN_CREATE=j ADMIN_EMAIL=admin@example.com ADMIN_NAME=CI OFFICE_ENABLE=${{ matrix.office }} DRAWIO_ENABLE=${{ matrix.drawio }} \
             BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic \
             INSTALL_UNATTENDED=n INSTALL_UFW=n INSTALL_FAIL2BAN=n \
-            ./install.sh --non-interactive
+            ./install.sh --non-interactive | tee install.txt
+          # Der Installer prüft draw.io bis durch Caddy und meldet das Ergebnis
+          if [ "${{ matrix.drawio }}" = j ]; then grep -q "draw.io läuft." install.txt; else grep -q "draw.io ist abgeschaltet" install.txt; fi
       - name: Erneuter Aufruf behält Schlüssel
         run: |
           before=$(sudo grep ENCRYPTION_KEY .env)
@@ -206,7 +208,8 @@ jobs:
           # draw.io: ohne Einstellung bietet das Update es an und schaltet es ohne Rückfrage ein; danach wieder aus
           test -z "$(sudo docker compose --profile drawio ps -q drawio)"
           sudo sed -i '/^WIKI_DRAWIO=/d' .env
-          sudo wikictl update-apply </dev/null
+          sudo wikictl update-apply </dev/null | tee update.txt
+          grep -q "draw.io läuft." update.txt
           sudo grep -q "^WIKI_DRAWIO='true'" .env
           sudo wikictl status | grep -q "draw.io bereit"
           curl -fsS -H 'Host: wiki.localtest' -H 'X-Forwarded-Proto: https' -o /dev/null http://127.0.0.1:8080/draw/index.html
