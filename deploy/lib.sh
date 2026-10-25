@@ -129,19 +129,65 @@ wait_office() {
   warn "Der Office-Editor ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs office"
 }
 
-# Wartet kurz auf draw.io, falls eingeschaltet (liefert nur Dateien aus, startet in Sekunden)
+# Ruft eine Adresse des Wikis über Caddy auf dem eigenen Server ab (je nach Betriebsart aus .env), ohne DNS und Proxy.
+# Weitere Argumente gehen an curl, z. B. -k oder -o datei.
+curl_caddy() {
+  local path=$1 domain tls port url opts=(-fsS -m 10 --noproxy "*")
+  shift
+  domain=$(env_get WIKI_DOMAIN)
+  tls=$(env_get WIKI_TLS)
+  port=$(env_get WIKI_HTTP_PORT)
+  case ${tls:-letsencrypt} in
+    proxy)
+      url="http://${port%:*}"
+      [[ $port == *:* ]] || url="http://127.0.0.1"
+      url+=":${port##*:}$path"
+      opts+=(-H "Host: $domain")
+      ;;
+    internal) url="https://$domain$path" opts+=(-k --resolve "$domain:443:127.0.0.1") ;;
+    *) url="https://$domain$path" opts+=(--resolve "$domain:443:127.0.0.1") ;;
+  esac
+  curl "${opts[@]}" "$@" "$url"
+}
+
+# Wartet auf draw.io, falls eingeschaltet (liefert nur Dateien aus, startet in Sekunden), und prüft den ganzen Weg:
+# Container gesund, Caddy liefert /draw/ aus, die API bietet Zeichnungen an. Fehler sind nur Warnungen, das Wiki läuft trotzdem.
 wait_drawio() {
-  [[ $(env_get WIKI_DRAWIO) == true ]] || return 0
-  local i state
-  for i in $(seq 1 20); do
-    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$(compose ps -q drawio 2>/dev/null)" 2>/dev/null || true)
-    if [[ $state == healthy ]]; then
-      ok "draw.io läuft."
-      return 0
-    fi
+  if [[ $(env_get WIKI_DRAWIO) != true ]]; then
+    info "draw.io ist abgeschaltet. Einschalten mit: sudo wikictl drawio on"
+    return 0
+  fi
+  info "Warte auf draw.io …"
+  local i id='' state=''
+  for i in $(seq 1 30); do
+    id=$(compose ps -q drawio 2>/dev/null || true)
+    state=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || true)
+    [[ $state == healthy ]] && break
     sleep 3
   done
-  warn "draw.io ist noch nicht bereit; das Wiki funktioniert trotzdem. Details mit: wikictl logs drawio"
+  if [[ $state != healthy ]]; then
+    warn "draw.io startet nicht (${state:-Container läuft nicht}); das Wiki funktioniert trotzdem. Details mit: wikictl logs drawio"
+    if [[ -n $id ]]; then
+      docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{.ExitCode}}: {{.Output}}{{end}}{{end}}' "$id" 2>/dev/null | tail -n 3 >&2 || true
+    fi
+    return 0
+  fi
+  # Das Zertifikat prüft check_through_caddy bzw. wikictl status; hier geht es nur um die Route zu draw.io
+  local page=''
+  for i in $(seq 1 10); do
+    page=$(curl_caddy /draw/index.html -k 2>/dev/null || true)
+    [[ $page == *js/bootstrap.js* ]] && break
+    sleep 3
+  done
+  if [[ $page != *js/bootstrap.js* ]]; then
+    warn "draw.io läuft, aber Caddy liefert /draw/ nicht aus. Details mit: wikictl logs caddy"
+    return 0
+  fi
+  if [[ $(compose exec -T api printenv DRAWIO_ENABLED 2>/dev/null | tr -d '\r') != true ]]; then
+    warn "draw.io läuft, aber die API bietet keine Zeichnungen an. Neu starten mit: sudo wikictl drawio on"
+    return 0
+  fi
+  ok "draw.io läuft."
 }
 
 # Schaltet den Office-Editor in .env an oder aus; das JWT-Geheimnis wird nur erzeugt, wenn es fehlt
