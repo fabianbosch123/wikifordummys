@@ -18,11 +18,14 @@ export class RateLimitService {
 
   async hit(key: string, limit: number, windowSec: number): Promise<RateResult> {
     const fullKey = `rl:${key}`;
-    const [[, count], [, ttl]] = (await this.redis
+    // Eine Runde zu Redis: Zähler samt Ablauf nur anlegen, wenn er fehlt (NX), dann hochzählen; INCR behält den Ablauf
+    const [, [, count], [, ttl]] = (await this.redis
       .multi()
+      .set(fullKey, 0, 'EX', windowSec, 'NX')
       .incr(fullKey)
       .ttl(fullKey)
-      .exec()) as [[null, number], [null, number]];
+      .exec()) as [unknown, [null, number], [null, number]];
+    // Nur noch für Zähler ohne Ablauf aus älteren Ständen
     if (ttl < 0) await this.redis.expire(fullKey, windowSec);
     const retryAfter = ttl > 0 ? ttl : windowSec;
     return { allowed: count <= limit, retryAfter };

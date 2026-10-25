@@ -1,4 +1,5 @@
 import type { ApiErrorBody, AttachmentDto } from '@wiki/shared';
+import { clearCache } from './cache';
 
 export class ApiError extends Error {
   constructor(
@@ -29,6 +30,7 @@ export async function api<T = unknown>(path: string, options: { method?: string;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (method !== 'GET') {
     headers['X-CSRF-Token'] = csrfToken ?? (await fetchCsrf());
+    clearCache();
   }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -50,6 +52,8 @@ export async function api<T = unknown>(path: string, options: { method?: string;
     }
   }
 
+  // Lesende Anfragen, die während der Änderung liefen, können den alten Stand haben
+  if (method !== 'GET') clearCache();
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
   if (!res.ok) {
@@ -64,6 +68,7 @@ export async function api<T = unknown>(path: string, options: { method?: string;
 
 /** Schickt eine Datei als Anfrage-Inhalt an die API (Hochladen von Anhängen und neuen Fassungen) */
 async function sendFile(path: string, file: Blob): Promise<AttachmentDto> {
+  clearCache();
   const send = async (token: string) =>
     fetch(`/api/v1${path}`, {
       method: 'POST',
@@ -73,6 +78,7 @@ async function sendFile(path: string, file: Blob): Promise<AttachmentDto> {
     });
   let res = await send(csrfToken ?? (await fetchCsrf()));
   if (res.status === 403 && (await res.clone().json().catch(() => null))?.error?.code === 'CSRF') res = await send(await fetchCsrf());
+  clearCache();
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     const err = (body as ApiErrorBody | null)?.error;

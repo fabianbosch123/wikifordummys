@@ -1,13 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { mkdir, open as openFile, rename, rm } from 'node:fs/promises';
+import { mkdir, open as openFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { APP_CONFIG, AppConfig } from '../config';
 import { Errors } from '../common/errors';
 import { SNIFF_BYTES } from './file-type';
+
+/** Halbe Uploads im tmp-Verzeichnis, die älter sind, stammen aus abgebrochenen Anfragen oder einem Absturz */
+const STALE_TMP_MS = 3600 * 1000;
 
 const KEY_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -26,12 +29,39 @@ export interface StoredFile {
  * nur für die API lesbar. Der Original-Dateiname steht ausschließlich in der Datenbank.
  */
 @Injectable()
-export class AttachmentStorageService {
+export class AttachmentStorageService implements OnModuleInit {
   private readonly logger = new Logger('Anhänge');
   readonly maxBytes: number;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
     this.maxBytes = config.ATTACHMENT_MAX_MB * 1024 * 1024;
+  }
+
+  /** Räumt beim Start liegengebliebene halbe Uploads weg; laufende Uploads sind jünger und bleiben */
+  async onModuleInit() {
+    const removed = await this.removeStaleTmp().catch((err) => {
+      this.logger.error(`tmp-Verzeichnis der Anhänge nicht aufgeräumt: ${String(err)}`);
+      return 0;
+    });
+    if (removed) this.logger.log(`${removed} abgebrochene Uploads aus dem tmp-Verzeichnis entfernt`);
+  }
+
+  async removeStaleTmp(now = Date.now()): Promise<number> {
+    const tmpDir = join(this.config.ATTACHMENTS_DIR, 'tmp');
+    const names = await readdir(tmpDir).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') return [];
+      throw err;
+    });
+    let removed = 0;
+    for (const name of names) {
+      const file = join(tmpDir, name);
+      const info = await stat(file).catch(() => null);
+      if (info?.isFile() && now - info.mtimeMs > STALE_TMP_MS) {
+        await rm(file, { force: true });
+        removed++;
+      }
+    }
+    return removed;
   }
 
   private pathOf(storageKey: string): string {

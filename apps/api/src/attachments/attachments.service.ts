@@ -18,8 +18,18 @@ const include = { uploadedBy: { select: { id: true, displayName: true } } } as c
 type AttachmentRow = Attachment & { uploadedBy: { id: string; displayName: string } | null };
 
 export interface AttachmentDownload {
-  file: StreamableFile;
+  /** null: der Browser hat diesen Stand schon (If-None-Match passt), Antwort 304 ohne Inhalt */
+  file: StreamableFile | null;
   etag: string;
+}
+
+/** Passt einer der ETags aus If-None-Match (auch schwache W/"…" und *)? */
+export function etagMatches(ifNoneMatch: string | undefined, etag: string): boolean {
+  if (!ifNoneMatch) return false;
+  return ifNoneMatch.split(',').some((tag) => {
+    const t = tag.trim();
+    return t === '*' || t.replace(/^W\//, '') === etag;
+  });
 }
 
 @Injectable()
@@ -59,18 +69,24 @@ export class AttachmentsService {
     return rows.map((a) => this.toDto(a, access.canEdit));
   }
 
+  /** Legt den Anfrage-Inhalt ab; zu groß angekündigt gibt 413 ohne zu lesen, leer gibt 400 */
+  private async storeBody(declaredLength: number | null, body: Readable): Promise<StoredFile> {
+    if (declaredLength !== null && declaredLength > this.storage.maxBytes) throw Errors.tooLarge(this.config.ATTACHMENT_MAX_MB);
+    const stored = await this.storage.store(body);
+    if (stored.sizeBytes === 0) {
+      await this.storage.remove([stored.storageKey]);
+      throw Errors.badRequest('Die Datei ist leer.');
+    }
+    return stored;
+  }
+
   /**
    * Speichert den Anfrage-Inhalt als Anhang. Die Rechte werden geprüft, bevor auch nur ein Byte gelesen wird.
    * Der angezeigte Typ ergibt sich allein aus dem Inhalt (S7).
    */
   async upload(pageId: string, rawFilename: string, declaredLength: number | null, body: Readable, ctx: AuthContext): Promise<AttachmentDto> {
     await this.permissions.requirePage(ctx.user, pageId, 'edit');
-    if (declaredLength !== null && declaredLength > this.storage.maxBytes) throw Errors.tooLarge(this.storage.maxBytes / 1024 / 1024);
-    const stored = await this.storage.store(body);
-    if (stored.sizeBytes === 0) {
-      await this.storage.remove([stored.storageKey]);
-      throw Errors.badRequest('Die Datei ist leer.');
-    }
+    const stored = await this.storeBody(declaredLength, body);
     const file = { mimeType: detectType(stored.head).mimeType, sizeBytes: stored.sizeBytes, storageKey: stored.storageKey, sha256: stored.sha256 };
     try {
       const created = await this.prisma.attachment.create({
@@ -97,12 +113,7 @@ export class AttachmentsService {
    */
   async uploadVersion(id: string, declaredLength: number | null, body: Readable, ctx: AuthContext): Promise<AttachmentDto> {
     await this.load(ctx.user, id, 'edit');
-    if (declaredLength !== null && declaredLength > this.storage.maxBytes) throw Errors.tooLarge(this.storage.maxBytes / 1024 / 1024);
-    const stored = await this.storage.store(body);
-    if (stored.sizeBytes === 0) {
-      await this.storage.remove([stored.storageKey]);
-      throw Errors.badRequest('Die Datei ist leer.');
-    }
+    const stored = await this.storeBody(declaredLength, body);
     await this.addVersion(id, stored, ctx.user.id, { endSession: true });
     const attachment = await this.prisma.attachment.findUnique({ where: { id }, include });
     if (!attachment) throw Errors.notFound();
@@ -138,10 +149,12 @@ export class AttachmentsService {
     });
   }
 
-  /** Liefert die aktuelle Fassung mit Rechteprüfung aus */
-  async download(user: AuthUser, id: string, forceDownload: boolean): Promise<AttachmentDownload> {
+  /** Liefert die aktuelle Fassung mit Rechteprüfung aus; hat der Browser sie schon, ohne Inhalt */
+  async download(user: AuthUser, id: string, forceDownload: boolean, ifNoneMatch?: string): Promise<AttachmentDownload> {
     const { attachment } = await this.load(user, id, 'view');
-    return { file: await this.stream(attachment, attachment.filename, forceDownload), etag: `"${attachment.sha256}"` };
+    const etag = `"${attachment.sha256}"`;
+    if (etagMatches(ifNoneMatch, etag)) return { file: null, etag };
+    return { file: await this.stream(attachment, attachment.filename, forceDownload), etag };
   }
 
   async versions(user: AuthUser, id: string): Promise<AttachmentVersionDto[]> {
@@ -164,13 +177,15 @@ export class AttachmentsService {
    * Ältere Fassungen gibt es zum Herunterladen; der Dateiname bekommt die Fassung angehängt.
    * Mit inline zeigt der Browser Bilder und PDF an (Zeichnungen auf Seiten verweisen auf eine feste Fassung).
    */
-  async downloadVersion(user: AuthUser, id: string, version: number, inline = false): Promise<AttachmentDownload> {
+  async downloadVersion(user: AuthUser, id: string, version: number, inline = false, ifNoneMatch?: string): Promise<AttachmentDownload> {
     const { attachment } = await this.load(user, id, 'view');
     const row = await this.prisma.attachmentVersion.findUnique({ where: { attachmentId_version: { attachmentId: id, version } } });
     if (!row) throw Errors.notFound();
+    const etag = `"${row.sha256}"`;
+    if (etagMatches(ifNoneMatch, etag)) return { file: null, etag };
     const dot = attachment.filename.lastIndexOf('.');
     const filename = dot > 0 ? `${attachment.filename.slice(0, dot)} (Fassung ${version})${attachment.filename.slice(dot)}` : `${attachment.filename} (Fassung ${version})`;
-    return { file: await this.stream(row, filename, !inline), etag: `"${row.sha256}"` };
+    return { file: await this.stream(row, filename, !inline), etag };
   }
 
   /**

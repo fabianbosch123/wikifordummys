@@ -3,6 +3,7 @@
 import type { TreeNodeDto } from '@wiki/shared';
 import Link from 'next/link';
 import { DragEvent, useEffect, useMemo, useState } from 'react';
+import { prefetchApiData } from '@/lib/data';
 
 type DropZone = 'before' | 'inside' | 'after';
 
@@ -136,7 +137,12 @@ export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Prop
                 ) : (
                   <span className="twisty" />
                 )}
-                <Link href={`/pages/${node.id}`} aria-current={node.id === currentId ? 'page' : undefined}>
+                <Link
+                  href={`/pages/${node.id}`}
+                  aria-current={node.id === currentId ? 'page' : undefined}
+                  onMouseEnter={() => prefetchApiData(`/pages/${node.id}`)}
+                  onFocus={() => prefetchApiData(`/pages/${node.id}`)}
+                >
                   {node.title}
                 </Link>
               </div>

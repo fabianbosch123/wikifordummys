@@ -4,9 +4,18 @@ import { Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
 import { DownloadQuery, UploadQuery, VersionQuery } from './attachments.dto';
-import { AttachmentsService } from './attachments.service';
+import { AttachmentDownload, AttachmentsService } from './attachments.service';
 
 const uuid = new ParseUUIDPipe({ version: undefined });
+
+/** Ohne Datei hat der Browser den Stand schon: 304 ohne Inhalt (Nest schreibt ihn sonst nie, auch nicht bei passendem ETag) */
+function sendDownload(res: Response, { file, etag }: AttachmentDownload, cacheControl: string) {
+  res.setHeader('Cache-Control', cacheControl);
+  res.setHeader('ETag', etag);
+  if (file) return file;
+  res.status(304);
+  return undefined;
+}
 
 @Controller()
 export class AttachmentsController {
@@ -47,12 +56,12 @@ export class AttachmentsController {
     @Param('id', uuid) id: string,
     @Query() q: DownloadQuery,
     @Auth() ctx: AuthContext,
+    @Req() req: WikiRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { file, etag } = await this.attachments.download(ctx.user, id, q.download === '1');
-    res.setHeader('Cache-Control', 'private, no-cache');
-    res.setHeader('ETag', etag);
-    return file;
+    // Die aktuelle Fassung kann sich ändern: jedes Mal nachfragen, bei gleichem Stand kommt 304
+    const download = await this.attachments.download(ctx.user, id, q.download === '1', req.headers['if-none-match']);
+    return sendDownload(res, download, 'private, no-cache');
   }
 
   @Get('attachments/:id/versions')
@@ -66,12 +75,12 @@ export class AttachmentsController {
     @Param('version', ParseIntPipe) version: number,
     @Query() q: VersionQuery,
     @Auth() ctx: AuthContext,
+    @Req() req: WikiRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { file, etag } = await this.attachments.downloadVersion(ctx.user, id, version, q.inline === '1');
-    res.setHeader('Cache-Control', 'private, no-cache');
-    res.setHeader('ETag', etag);
-    return file;
+    // Eine Fassung ändert sich nie (Zeichnungen auf Seiten verweisen auf sie): darf im Browser bleiben
+    const download = await this.attachments.downloadVersion(ctx.user, id, version, q.inline === '1', req.headers['if-none-match']);
+    return sendDownload(res, download, 'private, max-age=31536000, immutable');
   }
 
   @Delete('attachments/:id')

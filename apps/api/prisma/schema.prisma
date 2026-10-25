@@ -237,6 +237,8 @@ model Page {
   attachments  Attachment[]
 
   @@index([spaceId, parentId])
+  // Mit text_pattern_ops angelegt (Migration 20261027090000), damit path LIKE '/a/b/%' den Index nutzt;
+  // Prisma kennt Operatorklassen für B-Bäume nicht und lässt sie unverändert
   @@index([spaceId, path])
   @@index([deletedAt])
   @@index([searchVector], type: Gin)
