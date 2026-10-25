@@ -1,3 +1,4 @@
+import { ATTACHMENT_DEFAULT_MAX_MB } from '@wiki/shared';
 import { z } from 'zod';
 
 const bool = z
@@ -29,7 +30,7 @@ const schema = z
     /** Verzeichnis für Anhänge, außerhalb des Web-Roots (S7); im Container ein eigenes Volume */
     ATTACHMENTS_DIR: z.string().min(1).default('/var/lib/wiki/attachments'),
     /** Höchstgröße eines Anhangs in MiB (S7) */
-    ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(1024).default(50),
+    ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(1024).default(ATTACHMENT_DEFAULT_MAX_MB),
     /** Office-Editor (Euro-Office) zum Ansehen und Bearbeiten von Office-Anhängen */
     OFFICE_ENABLED: bool.default('false'),
     /** Gemeinsames JWT-Geheimnis mit dem Editor-Server, mindestens 32 Zeichen */

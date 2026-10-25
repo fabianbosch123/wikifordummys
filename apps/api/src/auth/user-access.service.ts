@@ -9,29 +9,20 @@ import type { AuthUser } from '../common/request-context';
 export class UserAccessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async globalPermissions(userId: string): Promise<Set<GlobalPermissionType>> {
-    const rows = await this.prisma.globalPermission.findMany({
-      where: {
-        group: {
-          OR: [{ name: SYSTEM_GROUPS.ALL_USERS }, { members: { some: { userId } } }],
-        },
-      },
-      select: { permission: true },
-    });
-    return new Set(rows.map((r) => r.permission));
-  }
-
-  /** Nur aktive Konten; sonst null */
+  /**
+   * Nur aktive Konten; sonst null. Läuft bei jeder Anfrage (AuthMiddleware), deshalb nur zwei Abfragen
+   * parallel: das Konto und seine Gruppen samt globaler Rechte.
+   */
   async loadActive(userId: string): Promise<AuthUser | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.status !== 'active') return null;
-    const [perms, groups] = await Promise.all([
-      this.globalPermissions(user.id),
+    const [user, groups] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId } }),
       this.prisma.group.findMany({
         where: { OR: [{ name: SYSTEM_GROUPS.ALL_USERS }, { members: { some: { userId } } }] },
-        select: { id: true },
+        select: { id: true, permissions: { select: { permission: true } } },
       }),
     ]);
+    if (!user || user.status !== 'active') return null;
+    const perms = new Set<GlobalPermissionType>(groups.flatMap((g) => g.permissions.map((p) => p.permission)));
     return {
       id: user.id,
       email: user.email,

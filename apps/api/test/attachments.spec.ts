@@ -1,6 +1,7 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttachmentDto } from '@wiki/shared';
+import { AttachmentStorageService } from '../src/attachments/attachment-storage.service';
 import { PagesService } from '../src/pages/pages.service';
 import { Account, Client, createUser, resetState, startApp, TestContext } from './helpers';
 import { createPage, createSpace, PNG } from './fixtures';
@@ -128,6 +129,18 @@ describe('Anhänge hochladen und abrufen', () => {
     expect((await anna.client.upload(pageId, 'grenze.bin', Buffer.alloc(1024 * 1024, 1))).status).toBe(201);
   });
 
+  it('räumt halbe Uploads aus abgebrochenen Anfragen weg, laufende bleiben', async () => {
+    const tmp = join(dir, 'tmp');
+    mkdirSync(tmp, { recursive: true });
+    writeFileSync(join(tmp, 'alt'), 'abgebrochen');
+    writeFileSync(join(tmp, 'neu'), 'läuft noch');
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+    utimesSync(join(tmp, 'alt'), twoHoursAgo, twoHoursAgo);
+    expect(await ctx.app.get(AttachmentStorageService).removeStaleTmp()).toBe(1);
+    expect(readdirSync(tmp)).toEqual(['neu']);
+    rmSync(join(tmp, 'neu'));
+  });
+
   it('Anhänge im Papierkorb sind nicht erreichbar; endgültiges Löschen entfernt die Dateien', async () => {
     const a = (await anna.client.upload(pageId, 'bild.png', PNG)).body as AttachmentDto;
     const file = await fileOf(a.id);
@@ -187,6 +200,35 @@ describe('Zeichnungen: neue Fassungen und feste Fassungen auf Seiten', () => {
     // Beschriftungen der Zeichnung sind über die Suche auffindbar
     const hits = await bernd.client.get('/search?q=Router');
     expect(hits.body.results).toEqual([expect.objectContaining({ id: pageId })]);
+  });
+
+  it('antwortet mit 304, wenn der Browser den Stand schon hat; feste Fassungen dürfen im Browser bleiben', async () => {
+    const a = (await anna.client.upload(pageId, 'Netz.drawio.png', PNG)).body as AttachmentDto;
+    const first = await raw(bernd.client, `/attachments/${a.id}`);
+    expect(first.headers['cache-control']).toBe('private, no-cache');
+    const etag = first.headers.etag as string;
+
+    const cached = await raw(bernd.client, `/attachments/${a.id}`).set('If-None-Match', etag);
+    expect(cached.status).toBe(304);
+    expect((cached.body as Buffer).length).toBe(0);
+    expect(cached.headers.etag).toBe(etag);
+    expect((await raw(bernd.client, `/attachments/${a.id}`).set('If-None-Match', `"x", W/${etag}`)).status).toBe(304);
+    expect((await raw(bernd.client, `/attachments/${a.id}`).set('If-None-Match', '"anders"')).status).toBe(200);
+
+    // Neue Fassung: der alte ETag passt nicht mehr, der Browser bekommt den neuen Inhalt
+    await anna.client.uploadVersion(a.id, PNG2);
+    const changed = await raw(bernd.client, `/attachments/${a.id}`).set('If-None-Match', etag);
+    expect(changed.status).toBe(200);
+    expect(Buffer.compare(changed.body as Buffer, PNG2)).toBe(0);
+
+    const v1 = await raw(bernd.client, `/attachments/${a.id}/versions/1?inline=1`);
+    expect(v1.headers['cache-control']).toBe('private, max-age=31536000, immutable');
+    expect((await raw(bernd.client, `/attachments/${a.id}/versions/1?inline=1`).set('If-None-Match', v1.headers.etag as string)).status).toBe(304);
+
+    // Die Rechteprüfung kommt vor dem 304: ohne Zugriff hilft auch ein passender ETag nicht
+    const carl = await createUser(ctx, 'carl@example.de', { ip: '10.0.0.7' });
+    expect((await anna.client.put('/spaces/IT/permissions', { entries: [{ type: 'user', id: anna.userId, role: 'admin' }] })).status).toBe(200);
+    expect((await raw(carl.client, `/attachments/${a.id}`).set('If-None-Match', changed.headers.etag as string)).status).toBe(404);
   });
 
   it('nur wer die Seite bearbeiten darf, speichert neue Fassungen; Leser sehen sie', async () => {

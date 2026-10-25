@@ -195,10 +195,6 @@ export interface TrashEntryDto {
 
 export const TRASH_RETENTION_DAYS = 30;
 
-export interface ConflictBody {
-  error: { code: 'CONFLICT'; message: string; current: PageDto };
-}
-
 // ---------- Rechte, Anhänge, Suche (Meilenstein 3) ----------
 
 /** Gruppe oder einzelner Benutzer, dem ein Recht gegeben wird */
