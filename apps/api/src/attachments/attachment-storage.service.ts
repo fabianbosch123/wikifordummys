@@ -108,6 +108,18 @@ export class AttachmentStorageService implements OnModuleInit {
     return createReadStream(this.pathOf(storageKey));
   }
 
+  /** Liest eine ganze Datei, z. B. eine Zeichnung für den MCP-Server; größere als maxBytes werden abgelehnt */
+  async readAll(storageKey: string, maxBytes: number): Promise<Buffer> {
+    const file = await openFile(this.pathOf(storageKey), 'r');
+    try {
+      const { size } = await file.stat();
+      if (size > maxBytes) throw Errors.tooLarge(Math.ceil(maxBytes / 1024 / 1024));
+      return await file.readFile();
+    } finally {
+      await file.close();
+    }
+  }
+
   /** Liest die ersten Bytes einer Datei, z. B. zur Typprüfung */
   async readHead(storageKey: string, bytes: number): Promise<Buffer> {
     const file = await openFile(this.pathOf(storageKey), 'r');

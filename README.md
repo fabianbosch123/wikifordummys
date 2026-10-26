@@ -79,6 +79,11 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Si
 - **Speicherung:** als PNG-Anhang der Seite mit eingebetteten draw.io-Daten (lässt sich auch in draw.io Desktop öffnen). Jedes Speichern legt eine neue Fassung des Anhangs an; die Seite verweist auf genau die Fassung, die beim Speichern der Seite aktuell war, damit ältere Seitenversionen die damalige Zeichnung zeigen. Beschriftungen der Zeichnung sind über die Suche auffindbar.
 - **Sicherheit:** draw.io läuft abgeschottet im Rahmen (eigener, leerer Ursprung ohne Zugriff auf Cookies und API), der Austausch läuft nur über postMessage; Rechte wie bei Seiten (Leser sehen, Bearbeiter bearbeiten). Details in [docs/betrieb.md](docs/betrieb.md#zeichnungen-mit-drawio).
 
+## Claude und KI-Assistenten (MCP)
+
+- **MCP-Server** unter `/api/v1/mcp`: Claude (Claude Code, Claude Desktop) liest und durchsucht das Wiki, legt Seiten aus Markdown an, ändert sie und erstellt draw.io-Zeichnungen aus XML. Standardmäßig aus; ein Administrator schaltet ihn unter Administration → Claude (MCP) ein.
+- **API-Tokens** legt jeder Benutzer im Profil an (mit 2FA-Code, höchstens ein Jahr gültig, nur lesen oder lesen und schreiben). Ein Token hat genau die Rechte seines Benutzers; jede Änderung steht im Audit-Log. Einrichtung, Werkzeuge und Sicherheitskonzept: [docs/mcp.md](docs/mcp.md).
+
 ## Aufbau
 
 ```
@@ -166,7 +171,7 @@ Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. U
 | --- | --- | --- | --- |
 | S1 | Passwort-Hashing | Argon2id (64 MiB, t=3), 12 bis 256 Zeichen, nie im Log | `password.service.spec.ts`, `auth.spec.ts` |
 | S2 | 2FA für alle | TOTP Pflicht vor jedem Zugriff; Geheimnis AES-256-GCM-verschlüsselt; 10 gehashte Wiederherstellungscodes, je einmal nutzbar; jeder TOTP-Code nur einmal gültig | `auth.spec.ts`, `onboarding.spec.ts` (E2E) |
-| S3 | Rate-Limiting | Login und 2FA: 5 pro Minute je IP und je Konto, danach steigende Sperre (1 min, 2 min, … bis 1 h); Passwort-Reset: 3 pro Stunde; API: 300 pro Minute je Benutzer | `auth.spec.ts` (429 mit `Retry-After`) |
+| S3 | Rate-Limiting | Login und 2FA: 5 pro Minute je IP und je Konto, danach steigende Sperre (1 min, 2 min, … bis 1 h); Passwort-Reset: 3 pro Stunde; API: 300 pro Minute je Benutzer; MCP: 120 Aufrufe pro Minute und 120 Änderungen pro Stunde je Token, steigende Sperre nach falschen Tokens | `auth.spec.ts` (429 mit `Retry-After`) |
 | S4 | Sitzungen | Serverseitig in Redis (nur Hash der Session-ID); Cookie `__Host-session`, HttpOnly, Secure, SameSite=Lax; neue Session-ID nach Passwort und nach 2FA; 12 h Leerlauf, 14 Tage absolut; Passwortänderung beendet alle anderen Sitzungen | `auth.spec.ts` |
 | S5 | CSRF | SameSite-Cookie plus Double-Submit-Token (`__Host-csrf` / Header `X-CSRF-Token`) bei allen ändernden Anfragen; Origin- und Referer-Prüfung | `auth.spec.ts` |
 | S6 | XSS | Seiten als TipTap-JSON; die API lässt nur erlaubte Knoten, Marks und Attribute zu und prüft Link- und Bild-Adressen (kein `javascript:`, `data:` usw.); die Weboberfläche rendert nur diese Knoten als React-Elemente, ohne `dangerouslySetInnerHTML` (Linter-Regel); eingefügtes HTML wird mit DOMPurify bereinigt; Content-Security-Policy mit Nonce je Anfrage (`script-src 'self' 'nonce-…' 'strict-dynamic'`) | `content.spec.ts`, `pages.spec.ts` (API und E2E) |
@@ -174,7 +179,7 @@ Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. U
 | S8 | Autorisierung | Zentraler Guard („verweigern“ als Standard) plus `PermissionService` als einzige Stelle für Space-Rollen und Seiteneinschränkungen; ohne Rolle oder bei Ansehen-Einschränkung 404; Baum, Space-Liste, Suche und Anhänge nutzen dieselbe Prüfung | `rights.spec.ts`: jede Route mit jeder Rolle (keine, Leser, Bearbeiter, Admin) und mit Einschränkung; `pages.spec.ts`: ohne Anmeldung, ohne 2FA |
 | S9 | Eingaben | Alle DTOs validiert, unbekannte Felder abgelehnt, Inhalte zusätzlich per Whitelist geprüft; nur parametrisierte SQL-Abfragen; Suchbegriffe werden auf Buchstaben und Ziffern reduziert, bevor sie in die tsquery gehen | `pages.spec.ts`, `rights.spec.ts`, `search.spec.ts` |
 | S10 | Keine Konto-Ausforschung | Gleiche Antwort und gleiche Argon2-Arbeit bei unbekannter E-Mail (Login, Reset); Sperren gelten auch für unbekannte Adressen | `auth.spec.ts` |
-| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen (auch Space-Rollen und Seiteneinschränkungen), Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten und Anhänge löschen, Seiten wiederherstellen, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts`, `rights.spec.ts`, `attachments.spec.ts` |
+| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen (auch Space-Rollen und Seiteneinschränkungen), Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten und Anhänge löschen, Seiten wiederherstellen, API-Tokens und jede Änderung über den MCP-Server, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts`, `rights.spec.ts`, `attachments.spec.ts`, `mcp.spec.ts` |
 
 Außerdem: Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Bilder lassen sich weiterhin auch per https-Adresse einbinden; dabei sieht der fremde Server die IP-Adresse der Lesenden. Hochgeladene Bilder vermeiden das.
 
@@ -221,6 +226,9 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `GET /directory` | Aktive Benutzer und Gruppen für die Rechtevergabe (ohne E-Mail) | angemeldet |
 | `GET/PUT/DELETE /admin/settings/mail` | SMTP-Zugang ansehen, prüfen und speichern, auf `.env` zurücksetzen | Systemadmin |
 | `POST /admin/settings/mail/test` | Testmail senden (Standard: an die eigene Adresse) | Systemadmin |
+| `GET/POST /me/tokens`, `DELETE /me/tokens/:id` | Eigene API-Tokens für den MCP-Server (Anlegen mit 2FA-Code) | angemeldet |
+| `GET/PUT /admin/api-access`, `DELETE /admin/api-access/tokens/:id` | MCP-Server ein- und ausschalten, alle Tokens sehen und widerrufen | Systemadmin |
+| `POST /mcp` | MCP-Server (JSON-RPC, Streamable HTTP), siehe [docs/mcp.md](docs/mcp.md) | API-Token (`Authorization: Bearer`) |
 | `GET /health` | Datenbank, Redis, Speicherplatz | öffentlich |
 
 ## Nächste Meilensteine

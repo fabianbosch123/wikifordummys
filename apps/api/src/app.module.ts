@@ -26,6 +26,8 @@ import { PrismaService } from './infra/prisma.service';
 import { RateLimitService } from './infra/rate-limit.service';
 import { createRedis, REDIS } from './infra/redis';
 import { MailService } from './mail/mail.service';
+import { McpController } from './mcp/mcp.controller';
+import { McpService } from './mcp/mcp.service';
 import { MeController } from './me/me.controller';
 import { OfficeController } from './office/office.controller';
 import { OfficeService } from './office/office.service';
@@ -38,6 +40,8 @@ import { SettingsController } from './settings/settings.controller';
 import { PermissionService } from './spaces/permission.service';
 import { SpacesController } from './spaces/spaces.controller';
 import { SpacesService } from './spaces/spaces.service';
+import { ApiTokensService } from './tokens/api-tokens.service';
+import { ApiAccessController, MyTokensController } from './tokens/tokens.controller';
 
 @Module({})
 export class AppModule implements NestModule {
@@ -57,6 +61,9 @@ export class AppModule implements NestModule {
         SettingsController,
         FeaturesController,
         HealthController,
+        MyTokensController,
+        ApiAccessController,
+        McpController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -88,6 +95,8 @@ export class AppModule implements NestModule {
         AttachmentsService,
         OfficeService,
         SearchService,
+        ApiTokensService,
+        McpService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
       exports: [PrismaService, AuthService, AuditService, UserAccessService, MailService, REDIS],

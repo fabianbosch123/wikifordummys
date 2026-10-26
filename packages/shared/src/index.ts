@@ -322,3 +322,57 @@ export interface MailSettingsInput {
   /** Verbindung vor dem Speichern nicht prüfen */
   skipVerify?: boolean;
 }
+
+// ---------- MCP-Server (Claude) ----------
+
+/** read = nur lesen und suchen, write = zusätzlich Seiten und Zeichnungen anlegen und ändern */
+export type ApiTokenScope = 'read' | 'write';
+export const API_TOKEN_SCOPES: readonly ApiTokenScope[] = ['read', 'write'];
+/** Wählbare Gültigkeit eines Tokens in Tagen; unbegrenzt gültige Tokens gibt es nicht */
+export const API_TOKEN_LIFETIMES_DAYS = [7, 30, 90, 180, 365] as const;
+/** Höchstzahl aktiver Tokens je Benutzer */
+export const API_TOKEN_MAX_PER_USER = 10;
+export const API_TOKEN_NAME_MAX_LENGTH = 80;
+
+export interface ApiTokenDto {
+  id: string;
+  name: string;
+  /** Anfang des Tokens zum Wiedererkennen, z. B. wfd_AbCd */
+  prefix: string;
+  scope: ApiTokenScope;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  /** active = verwendbar; expired und revoked bleiben zur Nachvollziehbarkeit in der Liste */
+  status: 'active' | 'expired' | 'revoked';
+}
+
+/** Antwort beim Anlegen: das Token selbst gibt es nur dieses eine Mal */
+export interface CreatedApiTokenDto extends ApiTokenDto {
+  token: string;
+}
+
+export interface CreateApiTokenInput {
+  name: string;
+  scope: ApiTokenScope;
+  expiresInDays: number;
+  /** Aktueller Code aus der Authenticator-App */
+  code: string;
+}
+
+/** Ansicht für Administratoren: Schalter und alle Tokens aller Benutzer */
+export interface ApiAccessDto {
+  /** MCP-Server eingeschaltet; aus = Tokens werden abgewiesen und können nicht angelegt werden */
+  enabled: boolean;
+  /** Adresse des MCP-Servers, die in Claude eingetragen wird */
+  endpoint: string;
+  tokens: (ApiTokenDto & { user: UserRefDto })[];
+}
+
+/** Ansicht für Benutzer im Profil */
+export interface MyApiTokensDto {
+  enabled: boolean;
+  endpoint: string;
+  tokens: ApiTokenDto[];
+}

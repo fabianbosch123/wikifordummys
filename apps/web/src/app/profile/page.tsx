@@ -2,6 +2,7 @@
 
 import { checkPasswordPolicy, type MeDto, type SessionInfoDto } from '@wiki/shared';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { ApiTokens } from '@/components/ApiTokens';
 import { RecoveryCodes } from '@/components/RecoveryCodes';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
@@ -200,6 +201,7 @@ export default function ProfilePage() {
             <PasswordForm user={user} onChanged={() => setReloadKey((k) => k + 1)} />
             <Sessions reloadKey={reloadKey} />
             <RecoveryCodesCard />
+            <ApiTokens />
           </>
         )
       }

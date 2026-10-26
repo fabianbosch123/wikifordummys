@@ -128,6 +128,7 @@ export class AdminService {
 
     if (dto.status === 'deactivated' && user.status !== 'deactivated') {
       await this.sessions.destroyAllForUser(id);
+      await this.auth.revokeApiTokens(id);
     }
     const changes = Object.fromEntries(Object.entries(dto).filter(([, v]) => v !== undefined));
     const action =
@@ -153,21 +154,23 @@ export class AdminService {
       this.prisma.user.update({ where: { id }, data: { totpEnabled: false, totpSecret: null, totpLastStep: null } }),
       this.prisma.recoveryCode.deleteMany({ where: { userId: id } }),
     ]);
-    // Beim nächsten Login muss 2FA neu eingerichtet werden
+    // Beim nächsten Login muss 2FA neu eingerichtet werden; API-Tokens enden mit
     await this.sessions.destroyAllForUser(id);
+    await this.auth.revokeApiTokens(id);
     await this.audit.log({ action: 'admin.user.2fa_reset', actorId: ctx.user.id, targetType: 'user', targetId: id, ip });
   }
 
   async revokeSessions(id: string, ctx: AuthContext, ip: string) {
     await this.getUser(id);
     const count = await this.sessions.destroyAllForUser(id);
+    const tokens = await this.auth.revokeApiTokens(id);
     await this.audit.log({
       action: 'admin.user.sessions_revoked',
       actorId: ctx.user.id,
       targetType: 'user',
       targetId: id,
       ip,
-      details: { count },
+      details: { count, tokens },
     });
   }
 
