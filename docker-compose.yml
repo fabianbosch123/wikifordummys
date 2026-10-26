@@ -97,6 +97,9 @@ services:
       EXAMPLE_ENABLED: "false"
       PLUGINS_ENABLED: "false"
       NGINX_CLIENT_MAX_BODY_SIZE: ${ATTACHMENT_MAX_MB:-50}m
+      # Standard sind 60 s; startet RabbitMQ im Container langsamer (erster Start, volle oder langsame Platte),
+      # läuft der Dokumentdienst ohne Warteschlange und der Editor antwortet bis zum Neustart mit HTTP 502
+      AMQP_START_TIMEOUT: "300"
     volumes:
       - office_data:/var/www/euro-office/Data
     healthcheck:

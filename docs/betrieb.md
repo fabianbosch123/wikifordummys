@@ -33,7 +33,7 @@ Der optionale Office-Editor ist [Euro-Office](https://github.com/euro-office) (A
 - **Rechte:** Ansehen mit Leserecht auf der Seite, Bearbeiten nur mit Bearbeiten-Recht. Bearbeiten öffnen und jedes Speichern stehen im Audit-Log (`attachment.office_opened`, `attachment.version_saved`).
 - **Gesperrt von außen:** die Beispiel-App, Info- und Verwaltungsseiten des Editor-Servers sowie die Pfade `/api/v1/office/files/…` und `/api/v1/office/callback`, die nur der Editor-Server im internen Netz nutzt.
 - **Daten:** Der Editor-Server speichert keine Dokumente dauerhaft; die Dateien liegen im Anhang-Volume und sind damit in der Sicherung enthalten. Ein Neustart des Dienstes während einer Bearbeitung verwirft nicht gespeicherte Änderungen.
-- **Prüfen:** `sudo wikictl office-check` lässt den Editor-Server eine Datei bei der API holen und umwandeln und holt das Ergebnis zurück. Fehler −8 bedeutet ein abweichendes JWT-Geheimnis, −4, dass der Editor-Server die API nicht erreicht.
+- **Prüfen:** `sudo wikictl office-check` lässt den Editor-Server eine Datei bei der API holen und umwandeln und holt das Ergebnis zurück. Fehler −8 bedeutet ein abweichendes JWT-Geheimnis, −4, dass der Editor-Server die API nicht erreicht. HTTP 502 heißt, dass der Dokumentdienst im Container nicht läuft; steht in `wikictl logs office` „RabbitMQ did not become ready“, hilft ein Neustart des Containers: `cd /opt/wikifordummys && sudo docker compose --profile office restart office`.
 - **Hinter einem vorhandenen Proxy** muss dieser WebSockets weiterreichen (Beispiele in [installation.md](installation.md)).
 
 ## Zeichnungen mit draw.io
