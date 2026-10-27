@@ -18,3 +18,16 @@
 {"ts": "2026-10-27T08:30:00Z", "id": "SEC-018", "event": "created", "run": "R1", "commit": "1e85dbc", "severity": "Info"}
 {"ts": "2026-10-27T08:30:00Z", "id": "SEC-019", "event": "created", "run": "R1", "commit": "1e85dbc", "severity": "Info"}
 {"ts": "2026-10-27T08:30:00Z", "id": "SEC-020", "event": "created", "run": "R1", "commit": "1e85dbc", "severity": "Info"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-001", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-002", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-003", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-004", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-005", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-006", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-008", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-009", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-010", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-012", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-013", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-017", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
+{"ts": "2026-10-27T09:30:00Z", "id": "SEC-019", "event": "fixed", "commit": "59029ac", "by": "Claude Code (im Auftrag von Fabian)"}
