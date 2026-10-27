@@ -70,6 +70,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Si
 ## Office-Editor (optional)
 
 - **Euro-Office** zum Ansehen und gemeinsamen Bearbeiten von Word-, Excel- und PowerPoint-Anhängen (auch OpenDocument) direkt im Wiki, unter `/office/` auf derselben Domain. Der Installer fragt, ob er laufen soll.
+- **Neue Office-Dateien aus dem Seiteneditor:** „＋ Office-Datei“ in der Werkzeugleiste legt ein leeres Word-Dokument, eine Excel-Tabelle oder eine PowerPoint-Präsentation als Anhang der Seite an, setzt einen Link an die Cursorposition und öffnet die Datei in einem neuen Tab im Office-Editor. Ist der Office-Editor ausgeschaltet, fehlt der Knopf.
 - **Fassungen:** Jedes Speichern im Editor legt eine neue Fassung des Anhangs an; ältere Fassungen bleiben zum Herunterladen erhalten.
 - **Sicherheit:** signierte Konfiguration und Rückrufe (JWT, gemeinsames Geheimnis), kurzlebige Datei-Links, Editor-Server ohne Internetzugang, Download-Adressen aus Rückrufen nur vom eigenen Editor-Server (Schutz vor SSRF), Typprüfung am Inhalt. Details in [docs/betrieb.md](docs/betrieb.md#office-editor).
 
@@ -221,6 +222,7 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `POST /attachments/:id/versions` | Neue Fassung hochladen (Datei als Body, z. B. gespeicherte Zeichnung) | Bearbeiter |
 | `GET /features` | Eingeschaltete optionale Dienste (Office-Editor, draw.io) | angemeldet |
 | `GET /attachments/:id/office?mode=view\|edit` | Signierte Konfiguration für den Office-Editor | Leser / Bearbeiter |
+| `POST /pages/:id/office-files` | Leere Word-, Excel- oder PowerPoint-Datei als Anhang anlegen (`kind`: docx, xlsx, pptx; `name`) | Bearbeiter |
 | `GET /office/files/:token`, `POST /office/callback` | Datei für den Editor-Server, Rückruf nach dem Speichern (von außen gesperrt) | signierter Link / JWT |
 | `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert | angemeldet |
 | `GET /directory` | Aktive Benutzer und Gruppen für die Rechtevergabe (ohne E-Mail) | angemeldet |

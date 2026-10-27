@@ -14,6 +14,7 @@ import { flattenTree } from '@/lib/tree';
 import { Callout } from './callout';
 import { DrawioDialog } from './DrawioDialog';
 import { askDrawingTitle, Drawing, DrawingContext } from './drawing';
+import { NewOfficeFile } from './NewOfficeFile';
 import { pendingFile, placeholderNode, type UploadStore } from './uploads';
 
 export const editorExtensions = [
@@ -116,8 +117,9 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: { i
   );
 }
 
-function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto[]; pageId?: string }) {
+function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: TreeNodeDto[]; pageId?: string; office: boolean }) {
   const [picker, setPicker] = useState(false);
+  const [officePicker, setOfficePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newDrawing, setNewDrawing] = useState<string | null>(null);
   const drawio = useContext(DrawingContext);
@@ -282,7 +284,18 @@ function Toolbar({ editor, pages, pageId }: { editor: Editor; pages: TreeNodeDto
             ◇ Zeichnung
           </ToolButton>
         )}
+        {office && (
+          <ToolButton
+            label={pageId ? 'Neue Word-, Excel- oder PowerPoint-Datei anlegen' : 'Neue Office-Datei (erst nach dem Anlegen der Seite möglich)'}
+            active={officePicker}
+            disabled={!pageId}
+            onClick={() => setOfficePicker(!officePicker)}
+          >
+            ＋ Office-Datei
+          </ToolButton>
+        )}
       </div>
+      {officePicker && pageId && <NewOfficeFile editor={editor} pageId={pageId} onClose={() => setOfficePicker(false)} />}
       {newDrawing !== null && pageId && (
         <DrawioDialog
           pageId={pageId}
@@ -388,7 +401,7 @@ export function WikiEditor({
   return (
     <DrawingContext.Provider value={{ pageId, enabled: features.data?.drawio === true }}>
       <div className="editor">
-        <Toolbar editor={editor} pages={pages} pageId={pageId} />
+        <Toolbar editor={editor} pages={pages} pageId={pageId} office={features.data?.office === true} />
         <EditorContent editor={editor} />
       </div>
     </DrawingContext.Provider>
