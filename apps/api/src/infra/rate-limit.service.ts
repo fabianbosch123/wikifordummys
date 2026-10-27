@@ -65,4 +65,16 @@ export class RateLimitService {
   async clearFailures(scope: string): Promise<void> {
     await this.redis.del(`fail:${scope}`, `lock:${scope}`);
   }
+
+  /** Löscht Fehlversuche und Sperren aller Scopes, die mit prefix beginnen (z. B. ein Konto von allen Netzen) */
+  async clearFailuresByPrefix(prefix: string): Promise<void> {
+    for (const kind of ['fail', 'lock']) {
+      let cursor = '0';
+      do {
+        const [next, keys] = await this.redis.scan(cursor, 'MATCH', `${kind}:${prefix}*`, 'COUNT', 200);
+        if (keys.length) await this.redis.del(...keys);
+        cursor = next;
+      } while (cursor !== '0');
+    }
+  }
 }

@@ -7,6 +7,7 @@ import { APP_CONFIG, AppConfig } from '../config';
 import { Errors } from '../common/errors';
 import type { AuthContext, AuthUser } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
+import { RateLimitService } from '../infra/rate-limit.service';
 import { officeFormat } from '../office/formats';
 import { PermissionService } from '../spaces/permission.service';
 import { userRef } from '../spaces/spaces.service';
@@ -42,6 +43,7 @@ export class AttachmentsService {
     private readonly permissions: PermissionService,
     private readonly storage: AttachmentStorageService,
     private readonly audit: AuditService,
+    private readonly limiter: RateLimitService,
   ) {}
 
   /** canEdit: der Benutzer darf die Seite bearbeiten (entscheidet über Bearbeiten im Office-Editor) */
@@ -69,13 +71,33 @@ export class AttachmentsService {
     return rows.map((a) => this.toDto(a, access.canEdit));
   }
 
-  /** Legt den Anfrage-Inhalt ab; zu groß angekündigt gibt 413 ohne zu lesen, leer gibt 400 */
-  private async storeBody(declaredLength: number | null, body: Readable): Promise<StoredFile> {
+  /** In den letzten 24 Stunden vom Benutzer hochgeladene Byte (Anhänge und neue Fassungen) */
+  private async uploadedToday(userId: string): Promise<number> {
+    const { _sum } = await this.prisma.attachmentVersion.aggregate({
+      where: { createdById: userId, createdAt: { gt: new Date(Date.now() - 24 * 3600 * 1000) } },
+      _sum: { sizeBytes: true },
+    });
+    return Number(_sum.sizeBytes ?? 0);
+  }
+
+  /**
+   * Legt den Anfrage-Inhalt ab; zu groß angekündigt gibt 413 ohne zu lesen, leer gibt 400.
+   * Begrenzt Uploads je Benutzer (Anzahl je Stunde, Menge je 24 Stunden) und prüft den freien Platz (SEC-003).
+   */
+  private async storeBody(declaredLength: number | null, body: Readable, userId: string): Promise<StoredFile> {
     if (declaredLength !== null && declaredLength > this.storage.maxBytes) throw Errors.tooLarge(this.config.ATTACHMENT_MAX_MB);
-    const stored = await this.storage.store(body);
+    await this.limiter.enforce([{ key: `upload:u:${userId}`, limit: this.config.RATE_UPLOADS_PER_HOUR, windowSec: 3600 }]);
+    const quota = this.config.ATTACHMENT_QUOTA_MB_PER_DAY * 1024 * 1024;
+    const before = await this.uploadedToday(userId);
+    if (before + (declaredLength ?? 0) > quota) throw Errors.quotaExceeded(this.config.ATTACHMENT_QUOTA_MB_PER_DAY);
+    const stored = await this.storage.store(body, declaredLength);
     if (stored.sizeBytes === 0) {
       await this.storage.remove([stored.storageKey]);
       throw Errors.badRequest('Die Datei ist leer.');
+    }
+    if (before + stored.sizeBytes > quota) {
+      await this.storage.remove([stored.storageKey]);
+      throw Errors.quotaExceeded(this.config.ATTACHMENT_QUOTA_MB_PER_DAY);
     }
     return stored;
   }
@@ -86,7 +108,7 @@ export class AttachmentsService {
    */
   async upload(pageId: string, rawFilename: string, declaredLength: number | null, body: Readable, ctx: AuthContext): Promise<AttachmentDto> {
     await this.permissions.requirePage(ctx.user, pageId, 'edit');
-    const stored = await this.storeBody(declaredLength, body);
+    const stored = await this.storeBody(declaredLength, body, ctx.user.id);
     const file = { mimeType: detectType(stored.head).mimeType, sizeBytes: stored.sizeBytes, storageKey: stored.storageKey, sha256: stored.sha256 };
     try {
       const created = await this.prisma.attachment.create({
@@ -113,7 +135,7 @@ export class AttachmentsService {
    */
   async uploadVersion(id: string, declaredLength: number | null, body: Readable, ctx: AuthContext): Promise<AttachmentDto> {
     await this.load(ctx.user, id, 'edit');
-    const stored = await this.storeBody(declaredLength, body);
+    const stored = await this.storeBody(declaredLength, body, ctx.user.id);
     await this.addVersion(id, stored, ctx.user.id, { endSession: true });
     const attachment = await this.prisma.attachment.findUnique({ where: { id }, include });
     if (!attachment) throw Errors.notFound();

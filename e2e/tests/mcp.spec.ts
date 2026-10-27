@@ -26,6 +26,8 @@ test('Claude über MCP: Zugang einschalten, Token anlegen, Seite und Zeichnung s
   // Profil: Token mit 2FA-Code anlegen; es wird genau einmal angezeigt
   await page.goto('/profile');
   await page.getByLabel('Name', { exact: true }).fill('Playwright');
+  await expect(page.getByLabel('Rechte')).toHaveValue('read');
+  await page.getByLabel('Rechte').selectOption('write');
   await page.getByLabel('Code aus der App').last().fill(nextCode(secret));
   await page.getByRole('button', { name: 'Token anlegen' }).click();
   const token = await page.getByLabel('Token', { exact: true }).inputValue();

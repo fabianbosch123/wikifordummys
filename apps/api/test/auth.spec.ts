@@ -187,14 +187,15 @@ describe('Login mit Pflicht-2FA', () => {
 });
 
 describe('Rate-Limiting (S3)', () => {
-  it('erlaubt höchstens 5 Login-Versuche pro Minute und Konto', async () => {
+  it('erlaubt höchstens 30 Login-Versuche pro Minute und Konto über alle IPs', async () => {
     await createUser(ctx, 'anna@example.de');
     const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const client = await new Client(ctx, `10.2.0.${i}`).init();
+    for (let i = 0; i < 31; i++) {
+      const client = await new Client(ctx, `10.2.${Math.floor(i / 4)}.${i}`).init();
       statuses.push((await client.post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' })).status);
     }
-    expect(statuses).toEqual([401, 401, 401, 401, 401, 429]);
+    expect(statuses.slice(0, 30).every((s) => s === 401)).toBe(true);
+    expect(statuses[30]).toBe(429);
   });
 
   it('erlaubt höchstens 5 Login-Versuche pro Minute und IP', async () => {
@@ -207,34 +208,59 @@ describe('Rate-Limiting (S3)', () => {
     expect(statuses[5]).toBe(429);
   });
 
-  it('sperrt ein Konto nach 5 Fehlversuchen mit steigender Dauer, auch bei richtigem Passwort', async () => {
+  it('sperrt ein Konto für das Netz des Absenders nach 5 Fehlversuchen mit steigender Dauer, auch bei richtigem Passwort', async () => {
     await createUser(ctx, 'anna@example.de');
     for (let i = 0; i < 5; i++) {
-      await (await new Client(ctx, `10.4.0.${i}`).init()).post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' });
+      await (await new Client(ctx, '10.4.0.1').init()).post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' });
     }
     // Zeitfenster der Minute ablaufen lassen, die Sperre bleibt
     const keys = await ctx.redis.keys('rl:*');
     if (keys.length) await ctx.redis.del(...keys);
 
-    const res = await (await new Client(ctx, '10.4.1.1').init()).post('/auth/login', { email: 'anna@example.de', password: PASSWORD });
+    const res = await (await new Client(ctx, '10.4.0.1').init()).post('/auth/login', { email: 'anna@example.de', password: PASSWORD });
     expect(res.status).toBe(429);
     expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
     expect(Number(res.headers['retry-after'])).toBeLessThanOrEqual(60);
 
     // Ein weiterer Fehlversuch verdoppelt die Sperre
     await ctx.redis.del(...(await ctx.redis.keys('lock:*')));
-    await (await new Client(ctx, '10.4.1.2').init()).post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' });
+    await (await new Client(ctx, '10.4.0.1').init()).post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' });
     const lockKey = (await ctx.redis.keys('lock:login:*'))[0];
     expect(await ctx.redis.ttl(lockKey)).toBeGreaterThan(60);
   });
 
+  it('sperrt die Kontoinhaberin nicht aus, wenn Fremde von anderswo falsch raten (SEC-002)', async () => {
+    await createUser(ctx, 'anna@example.de');
+    for (let i = 0; i < 8; i++) {
+      await (await new Client(ctx, '10.6.0.1').init()).post('/auth/login', { email: 'anna@example.de', password: 'falsch-falsch-falsch' });
+    }
+    const res = await (await new Client(ctx, '10.6.9.9').init()).post('/auth/login', { email: 'anna@example.de', password: PASSWORD });
+    expect(res.status).toBe(200);
+    // Aus dem Netz des Angreifers bleibt das Konto gesperrt
+    const keys = await ctx.redis.keys('rl:*');
+    if (keys.length) await ctx.redis.del(...keys);
+    expect((await (await new Client(ctx, '10.6.0.1').init()).post('/auth/login', { email: 'anna@example.de', password: PASSWORD })).status).toBe(429);
+  });
+
   it('sperrt unbekannte Adressen genauso wie bekannte (S10)', async () => {
     for (let i = 0; i < 5; i++) {
-      await (await new Client(ctx, `10.5.0.${i}`).init()).post('/auth/login', { email: 'niemand@example.de', password: 'falsch-falsch-falsch' });
+      await (await new Client(ctx, '10.5.0.1').init()).post('/auth/login', { email: 'niemand@example.de', password: 'falsch-falsch-falsch' });
     }
     const keys = await ctx.redis.keys('rl:*');
     if (keys.length) await ctx.redis.del(...keys);
-    const res = await (await new Client(ctx, '10.5.1.1').init()).post('/auth/login', { email: 'niemand@example.de', password: 'x' });
+    const res = await (await new Client(ctx, '10.5.0.1').init()).post('/auth/login', { email: 'niemand@example.de', password: 'x' });
+    expect(res.status).toBe(429);
+  });
+
+  it('sperrt die 2FA-Bestätigung heikler Aktionen nach 5 Fehlversuchen (SEC-008)', async () => {
+    const account = await createUser(ctx, 'anna@example.de');
+    for (let i = 0; i < 5; i++) {
+      expect((await account.client.post('/me/2fa/recovery-codes', { code: '000000' })).status).toBe(401);
+    }
+    const keys = await ctx.redis.keys('rl:*');
+    if (keys.length) await ctx.redis.del(...keys);
+    await ctx.prisma.user.update({ where: { id: account.userId }, data: { totpLastStep: null } });
+    const res = await account.client.post('/me/2fa/recovery-codes', { code: totpAt(account.secret, Date.now()) });
     expect(res.status).toBe(429);
   });
 

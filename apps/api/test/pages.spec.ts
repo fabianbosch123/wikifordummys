@@ -287,6 +287,20 @@ describe('Versionen: Verlauf, Vergleich, Wiederherstellen', () => {
     expect((await anna.client.get(`/pages/${page.id}/diff?from=1&to=9`)).status).toBe(404);
     expect((await anna.client.get(`/pages/${page.id}/diff?from=x&to=2`)).status).toBe(400);
     expect((await anna.client.post(`/pages/${page.id}/restore/9`)).status).toBe(404);
+
+    // Eine alte Fassung, die heute nicht mehr erlaubt wäre, lässt sich nicht wiederherstellen (SEC-017)
+    await ctx.prisma.$executeRaw`ALTER TABLE page_versions DISABLE TRIGGER page_versions_no_update`;
+    try {
+      await ctx.prisma.pageVersion.update({
+        where: { pageId_version: { pageId: page.id, version: 1 } },
+        data: { content: { type: 'doc', content: [{ type: 'iframe', attrs: { src: 'https://evil.example' } }] } },
+      });
+    } finally {
+      await ctx.prisma.$executeRaw`ALTER TABLE page_versions ENABLE TRIGGER page_versions_no_update`;
+    }
+    const unsafe = await anna.client.post(`/pages/${page.id}/restore/1`);
+    expect(unsafe.status).toBe(400);
+    expect((await anna.client.get(`/pages/${page.id}`)).body.version).toBe(3);
   });
 });
 

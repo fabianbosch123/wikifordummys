@@ -407,16 +407,18 @@ export class PagesService implements OnModuleInit, OnModuleDestroy {
   async restoreVersion(id: string, version: number, ctx: AuthContext): Promise<PageDto> {
     await this.permissions.requirePage(ctx.user, id, 'edit');
     const old = await this.loadVersion(id, version);
+    // Alte Fassungen durch die heutige Inhaltsprüfung schicken: wird die Whitelist später enger, kommt nichts daran vorbei (SEC-017)
+    const { content: clean, contentText } = parseContent(old.content);
     await this.prisma.$transaction(async (tx) => {
       const page = await this.lockPage(tx, id);
       const next = page.version + 1;
-      const content = old.content as Prisma.InputJsonValue;
+      const content = json(clean);
       await tx.page.update({
         where: { id },
-        data: { title: old.title, content, contentText: old.contentText, version: next, updatedById: ctx.user.id },
+        data: { title: old.title, content, contentText, version: next, updatedById: ctx.user.id },
       });
       await tx.pageVersion.create({
-        data: { pageId: id, version: next, title: old.title, content, contentText: old.contentText, authorId: ctx.user.id, restoredFrom: version },
+        data: { pageId: id, version: next, title: old.title, content, contentText, authorId: ctx.user.id, restoredFrom: version },
       });
     });
     return this.get(ctx.user, id);

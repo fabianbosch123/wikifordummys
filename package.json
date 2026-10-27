@@ -23,7 +23,8 @@
   "pnpm": {
     "overrides": {
       "postcss@<8.5.18": "^8.5.18",
-      "deepmerge-ts@<8": "^8.0.0"
+      "deepmerge-ts@<8": "^8.0.0",
+      "multer@<2.5.0": "^2.5.0"
     }
   }
 }

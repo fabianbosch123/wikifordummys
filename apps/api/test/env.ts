@@ -16,3 +16,5 @@ process.env.ARGON2_TIME_COST ??= '1';
 // Anhänge in ein temporäres Verzeichnis; kleine Höchstgröße, damit der Test des Limits schnell ist
 process.env.ATTACHMENTS_DIR ??= join(tmpdir(), 'wiki-test-attachments');
 process.env.ATTACHMENT_MAX_MB ??= '1';
+// Platzreserve in Tests aus, der Datenträger der Sandbox ist klein
+process.env.ATTACHMENT_MIN_FREE_MB ??= '0';
