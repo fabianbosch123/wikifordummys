@@ -63,6 +63,8 @@ services:
       OFFICE_JWT_SECRET: ${OFFICE_JWT_SECRET:-}
       # Zeichnungen mit draw.io (Dienst drawio, nur mit WIKI_DRAWIO=true)
       DRAWIO_ENABLED: ${WIKI_DRAWIO:-false}
+      # OAuth für claude.ai-Connectors: erlaubte Rücksprung-Hosts (docs/mcp.md)
+      OAUTH_REDIRECT_HOSTS: ${OAUTH_REDIRECT_HOSTS:-claude.ai,claude.com}
     volumes:
       - attachments:/var/lib/wiki/attachments
     healthcheck:

@@ -22,6 +22,8 @@ export async function createApp(config: AppConfig): Promise<INestApplication> {
   );
   app.use(cookieParser());
   app.useBodyParser('json', { limit: '1mb' });
+  // Nur für den OAuth-Token-Endpunkt (application/x-www-form-urlencoded, RFC 6749)
+  app.useBodyParser('urlencoded', { extended: false, limit: '16kb' });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true, stopAtFirstError: true }),

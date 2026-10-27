@@ -65,6 +65,14 @@ handle /api/* {
 	reverse_proxy api:3001
 }
 
+# OAuth-Metadaten für claude.ai-Connectors (RFC 8414, RFC 9728) stehen an fester Stelle unter /.well-known;
+# die API liefert sie unter /api/v1/.well-known aus
+@oauthMeta path /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server
+handle @oauthMeta {
+	rewrite * /api/v1{path}
+	reverse_proxy api:3001
+}
+
 # Office-Editor (Dienst office, optional): Beispiel-App, Infoseite und Verwaltung des Editor-Servers bleiben gesperrt
 @officeBlocked path /office/example* /office/info* /office/admin*
 handle @officeBlocked {

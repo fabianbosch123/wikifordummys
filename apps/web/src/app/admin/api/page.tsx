@@ -2,7 +2,7 @@
 
 import type { ApiAccessDto } from '@wiki/shared';
 import { useCallback, useEffect, useState } from 'react';
-import { SCOPE_LABEL, TokenStatus } from '@/components/ApiTokens';
+import { SCOPE_LABEL, TokenName } from '@/components/ApiTokens';
 import { Alert, Card, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 
@@ -83,7 +83,7 @@ export default function AdminApiPage() {
                   <tr key={t.id}>
                     <td>{t.user.displayName}</td>
                     <td>
-                      {t.name} <code>{t.prefix}…</code> <TokenStatus token={t} />
+                      <TokenName token={t} />
                     </td>
                     <td>{SCOPE_LABEL[t.scope]}</td>
                     <td>{formatDate(t.createdAt)}</td>

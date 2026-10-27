@@ -23,6 +23,15 @@ export function TokenStatus({ token }: { token: ApiTokenDto }) {
   return <span className="badge ok">aktiv</span>;
 }
 
+/** Name eines Tokens; per OAuth verbundene Anwendungen (z. B. claude.ai) ohne Präfix, das wechselt bei jeder Erneuerung */
+export function TokenName({ token }: { token: ApiTokenDto }) {
+  return (
+    <>
+      {token.name} {token.client ? <span className="badge">Connector (OAuth)</span> : <code>{token.prefix}…</code>} <TokenStatus token={token} />
+    </>
+  );
+}
+
 /** Befehl für Claude Code; das Token steht nur in der Kopie, die der Benutzer einmal sieht */
 function claudeCodeCommand(endpoint: string, token: string) {
   return `claude mcp add --transport http wiki ${endpoint} --header "Authorization: Bearer ${token}"`;
@@ -75,6 +84,10 @@ export function ApiTokens() {
         Rechten. Jede Änderung steht mit deinem Namen in der Versionsgeschichte und im Audit-Log. Adresse des MCP-Servers:{' '}
         <code>{data.endpoint}</code>
       </p>
+      <p className="muted">
+        In claude.ai (Web, App, Projekte) fügst du das Wiki unter Einstellungen → Connectors als eigenen Connector mit dieser Adresse hinzu. Ein Token
+        brauchst du dafür nicht: Claude leitet dich zur Anmeldung ins Wiki, und die Verbindung erscheint danach hier in der Liste.
+      </p>
       {!data.enabled && <Alert kind="info">Der MCP-Zugang ist in der Administration ausgeschaltet; vorhandene Tokens funktionieren gerade nicht.</Alert>}
 
       {created && (
@@ -107,7 +120,7 @@ export function ApiTokens() {
               {data.tokens.map((t) => (
                 <tr key={t.id}>
                   <td>
-                    {t.name} <code>{t.prefix}…</code> <TokenStatus token={t} />
+                    <TokenName token={t} />
                   </td>
                   <td>{SCOPE_LABEL[t.scope]}</td>
                   <td>{formatDate(t.expiresAt)}</td>

@@ -8,6 +8,7 @@ import { Public } from '../common/decorators';
 import { ApiError } from '../common/errors';
 import { clientIp, WikiRequest } from '../common/request-context';
 import { RateLimitService } from '../infra/rate-limit.service';
+import { OAuthService } from '../oauth/oauth.service';
 import { ApiTokensService, mcpDisabled } from '../tokens/api-tokens.service';
 import { McpService } from './mcp.service';
 
@@ -31,6 +32,7 @@ export class McpController {
     private readonly mcp: McpService,
     private readonly limiter: RateLimitService,
     private readonly audit: AuditService,
+    private readonly oauth: OAuthService,
   ) {
     this.origin = new URL(config.APP_ORIGIN).origin;
   }
@@ -50,7 +52,8 @@ export class McpController {
     const raw = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
     const auth = raw ? await this.tokens.authenticate(raw, ip) : null;
     if (!auth) {
-      res.setHeader('WWW-Authenticate', 'Bearer realm="wikifordummys"');
+      // resource_metadata führt OAuth-Clients wie claude.ai zur Anmeldung (RFC 9728)
+      res.setHeader('WWW-Authenticate', `Bearer realm="wikifordummys", resource_metadata="${this.oauth.resourceMetadataUrl}"`);
       if (raw) {
         await this.limiter.registerFailure(scope, 10);
         await this.audit.log({ action: 'mcp.auth.failed', ip, details: { prefix: raw.slice(0, 8) } });

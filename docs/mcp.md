@@ -5,7 +5,8 @@ Das Wiki hat einen eingebauten [MCP-Server](https://modelcontextprotocol.io) (Mo
 anlegen und ändern.
 
 - Adresse: `https://<deine-domain>/api/v1/mcp` (Streamable HTTP, zustandslos)
-- Anmeldung: persönliches API-Token im Header `Authorization: Bearer wfd_…`
+- Anmeldung: per OAuth (claude.ai, auch App und Projekte) oder mit persönlichem API-Token im Header `Authorization: Bearer wfd_…`
+  (Claude Code, Claude Desktop, andere Clients)
 - Rechte: genau die des Benutzers, dem das Token gehört (Space-Rollen und Seiteneinschränkungen gelten unverändert)
 
 ## Einrichten
@@ -48,7 +49,22 @@ Danach Claude Desktop neu starten. (Das Token steht in `env`, weil Leerzeichen i
 
 ### claude.ai (Web, App, Projekte)
 
-Eigene Connectors in claude.ai verlangen eine OAuth-Anmeldung. Die ist noch nicht eingebaut und folgt als eigener Schritt.
+Hier braucht es kein Token, die Anmeldung läuft über OAuth:
+
+1. In claude.ai **Einstellungen → Connectors → „Eigenen Connector hinzufügen“**, Name z. B. „Wiki“, Adresse
+   `https://wiki.example.de/api/v1/mcp`. Client-ID und -Geheimnis bleiben leer (Claude registriert sich selbst).
+2. Auf **Verbinden** klicken. claude.ai öffnet die Seite **Zugriff auf das Wiki** im Wiki. Wer nicht angemeldet ist, meldet sich
+   zuerst wie gewohnt an (Passwort und 2FA) und landet danach wieder dort.
+3. Die Seite zeigt, welche Anwendung zugreifen will und wohin es danach zurückgeht (claude.ai). Rechte und Gültigkeit wählen, den
+   aktuellen Code aus der Authenticator-App eingeben, **Zulassen**.
+4. Der Connector steht dann in claude.ai in Chats und Projekten zur Verfügung (im Chat über „+“ → Connectors einschalten).
+   In Organisationen (Team, Enterprise) fügt ein Owner den Connector einmal hinzu; jeder Benutzer verbindet dann sein eigenes Konto.
+
+Die Verbindung erscheint im Profil unter „Claude und andere KI-Assistenten (MCP)“ als **Connector (OAuth)** und lässt sich dort
+widerrufen. Claude erneuert seinen Zugang selbst, bis die gewählte Gültigkeit abläuft; danach einfach in claude.ai neu verbinden.
+
+**Voraussetzung:** claude.ai ruft das Wiki aus dem Internet auf. Das klappt nur, wenn das Wiki öffentlich erreichbar ist und ein
+öffentlich gültiges Zertifikat hat (Betriebsart `letsencrypt` oder `proxy`), nicht mit `internal`.
 
 ### Betriebsart `internal` (eigene Zertifizierungsstelle)
 
@@ -97,9 +113,27 @@ draw.io und speichert sie, entsteht das exakte Bild.
 - **Rate-Limits:** 120 Aufrufe pro Minute und 120 ändernde Aufrufe pro Stunde je Token (`RATE_MCP_PER_MINUTE`,
   `RATE_MCP_WRITES_PER_HOUR`). Nach 10 falschen Tokens wird die IP steigend gesperrt (1 Minute, dann doppelt so lange, höchstens
   1 Stunde); fail2ban wertet `mcp.auth.failed` wie fehlgeschlagene Anmeldungen aus.
+- **OAuth (claude.ai):** OAuth 2.1 nach der MCP-Spezifikation. Metadaten unter `/.well-known/oauth-protected-resource` und
+  `/.well-known/oauth-authorization-server` (Caddy reicht sie an die API weiter), Dynamic Client Registration, Autorisierungscode nur
+  mit PKCE (S256), Rücksprung nur an fest registrierte Adressen.
+  - **Rücksprung nur zu Claude:** Clients dürfen sich nur mit Rücksprungadressen bei `claude.ai` und `claude.com` (https) oder auf
+    dem eigenen Rechner (`http://localhost`, `127.0.0.1`) registrieren. Andere Hosts erlaubt `OAUTH_REDIRECT_HOSTS` in `.env`
+    (kommagetrennt, z. B. `OAUTH_REDIRECT_HOSTS=claude.ai,claude.com,beispiel.de`). So kann niemand eine eigene Anwendung
+    registrieren, die Benutzer per Link zur Zustimmung bringt und den Zugang an sich selbst schicken lässt.
+  - **Zustimmung** nur mit vollständiger Anmeldung im Wiki und aktuellem 2FA-Code. Die Seite zeigt den Ziel-Host groß an; der
+    Name der Anwendung stammt vom Client selbst und ist nur ein Hinweis.
+  - **Tokens:** Access-Tokens (`wfd_…`) gelten eine Stunde, Refresh-Tokens (`wfr_…`) werden bei jeder Erneuerung ausgetauscht.
+    Wird ein schon ersetztes Refresh-Token noch einmal vorgelegt, endet die ganze Verbindung (`oauth.refresh.reused`). Beide liegen
+    nur als SHA-256 in der Datenbank; Codes gelten 10 Minuten und nur einmal. Eine Verbindung je Benutzer und Anwendung: neu
+    verbinden ersetzt die alte.
+  - Für Verbindungen gilt alles wie für Tokens: dieselben Rechte, dieselben Rate-Limits, Widerruf im Profil und durch Admins, automatischer
+    Widerruf bei Passwort-Reset, 2FA-Reset, „Alle Sitzungen beenden“ und Deaktivieren; bei ausgeschaltetem MCP-Server gibt es auch keine
+    neuen Tokens. Registrierungen sind auf 10 pro Stunde und IP begrenzt, der Token-Endpunkt auf 60 Anfragen pro Minute und IP;
+    Registrierungen ohne Zustimmung werden nach einem Tag gelöscht.
 - **Audit-Log:** `token.created`, `token.revoked`, `admin.token.revoked`, `admin.settings.mcp.updated`, `mcp.auth.failed` sowie jede
   Änderung über MCP (`mcp.page.created`, `mcp.page.updated`, `mcp.drawing.created`, `mcp.drawing.updated`) mit Benutzer, IP und
-  Token. Filter „Claude (MCP)“ und „API-Tokens“ in Administration → Audit-Log. Seiten- und Anhangversionen tragen den Benutzer des Tokens.
+  Token, außerdem `oauth.client.registered`, `oauth.authorized`, `oauth.denied`, `oauth.revoked` und `oauth.refresh.reused`. Filter
+  „Claude (MCP)“, „API-Tokens“ und „Connectors (OAuth)“ in Administration → Audit-Log. Seiten- und Anhangversionen tragen den Benutzer des Tokens.
 - **Was ein Token-Dieb könnte:** alles, was der Benutzer über diese Werkzeuge darf, bis das Token abläuft oder widerrufen ist. Deshalb:
   eigenes Konto mit knappen Rechten, kurze Gültigkeit, und im Zweifel widerrufen. Die Liste zeigt, wann und von welcher IP ein Token
   zuletzt verwendet wurde.
@@ -114,3 +148,5 @@ draw.io und speichert sie, entsteht das exakte Bild.
 | `CONFLICT … Aktuelle Version: n` | Die Seite wurde inzwischen geändert; neu lesen und darauf aufbauen |
 | `NOT_FOUND` | Seite oder Space gibt es nicht oder der Benutzer darf sie nicht sehen |
 | `FORBIDDEN` | Der Benutzer darf hier nicht schreiben (Rolle Leser, Bearbeiten-Einschränkung, archivierter Space) |
+| claude.ai: „Rücksprung zu … ist nicht erlaubt“ | Der Client nutzt einen Host außerhalb von `OAUTH_REDIRECT_HOSTS` |
+| claude.ai: Verbinden scheitert ohne Zustimmungsseite | Wiki nicht aus dem Internet erreichbar, kein öffentliches Zertifikat oder MCP-Server ausgeschaltet; prüfen mit `curl https://wiki.example.de/.well-known/oauth-authorization-server` |
