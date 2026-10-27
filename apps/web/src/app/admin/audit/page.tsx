@@ -13,6 +13,7 @@ const FILTERS = [
   { value: 'admin', label: 'Admin-Aktionen' },
   { value: 'mcp', label: 'Claude (MCP)' },
   { value: 'token', label: 'API-Tokens' },
+  { value: 'oauth', label: 'Connectors (OAuth)' },
 ];
 
 const PAGE = 100;

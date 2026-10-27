@@ -2,7 +2,7 @@
 // Meilenstein 2: Spaces, Seitenbaum, Seitenversionen.
 // Meilenstein 3: Space-Rollen, Seiteneinschränkungen, Anhänge, Volltextsuche.
 // Meilenstein 4: Einstellungen aus der Administration (SMTP).
-// MCP-Server: API-Token je Benutzer für Claude und andere MCP-Clients.
+// MCP-Server: API-Token je Benutzer für Claude und andere MCP-Clients, OAuth für claude.ai.
 
 generator client {
   provider      = "prisma-client-js"
@@ -351,21 +351,43 @@ enum ApiTokenScope {
 /// API-Token für den MCP-Server. Gespeichert wird nur der SHA-256 des Tokens; das Token selbst sieht
 /// der Benutzer einmal beim Anlegen. Es handelt immer mit den Rechten seines Benutzers.
 model ApiToken {
-  id         String        @id @default(uuid()) @db.Uuid
-  userId     String        @map("user_id") @db.Uuid
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
   /// Wofür das Token gedacht ist, z. B. „Claude Desktop Laptop“
-  name       String
-  tokenHash  String        @unique @map("token_hash")
+  name            String
+  tokenHash       String        @unique @map("token_hash")
   /// Die ersten Zeichen des Tokens, damit man es in Listen wiedererkennt
-  prefix     String
-  scope      ApiTokenScope
-  expiresAt  DateTime      @map("expires_at")
-  lastUsedAt DateTime?     @map("last_used_at")
-  lastUsedIp String?       @map("last_used_ip")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  revokedAt  DateTime?     @map("revoked_at")
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prefix          String
+  scope           ApiTokenScope
+  expiresAt       DateTime      @map("expires_at")
+  lastUsedAt      DateTime?     @map("last_used_at")
+  lastUsedIp      String?       @map("last_used_ip")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  revokedAt       DateTime?     @map("revoked_at")
+  /// OAuth: Client, für den der Benutzer zugestimmt hat; null = im Profil angelegtes Token
+  clientId        String?       @map("client_id") @db.Uuid
+  /// OAuth: SHA-256 des aktuellen Refresh-Tokens (wird bei jedem Erneuern ausgetauscht)
+  refreshHash     String?       @unique @map("refresh_hash")
+  /// OAuth: Ablauf des aktuellen Access-Tokens; expiresAt ist dann das Ende der Zustimmung
+  accessExpiresAt DateTime?     @map("access_expires_at")
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client          OAuthClient?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([clientId])
   @@map("api_tokens")
+}
+
+/// Per Dynamic Client Registration (RFC 7591) angemeldeter OAuth-Client, z. B. claude.ai
+model OAuthClient {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  redirectUris String[]   @map("redirect_uris")
+  /// Nur bei vertraulichen Clients (client_secret_post/basic); öffentliche Clients nutzen allein PKCE
+  secretHash   String?    @map("secret_hash")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  createdIp    String?    @map("created_ip")
+  tokens       ApiToken[]
+
+  @@map("oauth_clients")
 }

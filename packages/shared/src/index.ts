@@ -337,6 +337,8 @@ export const API_TOKEN_NAME_MAX_LENGTH = 80;
 export interface ApiTokenDto {
   id: string;
   name: string;
+  /** Per OAuth verbundene Anwendung (z. B. claude.ai); null = im Profil angelegtes Token */
+  client: string | null;
   /** Anfang des Tokens zum Wiedererkennen, z. B. wfd_AbCd */
   prefix: string;
   scope: ApiTokenScope;
@@ -375,4 +377,13 @@ export interface MyApiTokensDto {
   enabled: boolean;
   endpoint: string;
   tokens: ApiTokenDto[];
+}
+
+/** Zustimmungsseite für OAuth (claude.ai-Connector): wer fragt an und wohin geht es danach */
+export interface OAuthConsentInfoDto {
+  /** Vom Client selbst gewählter Name, deshalb nur als Hinweis anzeigen */
+  clientName: string;
+  /** Host der Rücksprungadresse, z. B. claude.ai; der verlässliche Teil */
+  redirectHost: string;
+  requestedScope: ApiTokenScope;
 }

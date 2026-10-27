@@ -58,9 +58,10 @@ export function RequireAuth({ admin, children }: { admin?: boolean; children: (u
     if (!state) return;
     if (!state.authenticated) {
       const target = pathForStage(state.stage);
-      // Nach der Anmeldung zurück zur ursprünglich aufgerufenen Seite
+      // Nach der Anmeldung zurück zur ursprünglich aufgerufenen Seite, samt Parametern (z. B. OAuth-Zustimmung)
       const keepNext = pathname !== '/' && target !== '/setup-2fa';
-      router.replace(keepNext ? `${target}?next=${encodeURIComponent(pathname)}` : target);
+      const next = pathname + window.location.search;
+      router.replace(keepNext ? `${target}?next=${encodeURIComponent(next)}` : target);
     } else if (state.user?.mustChangePassword && pathname !== '/profile') {
       // Startpasswort aus der Kommandozeile: erst ändern, dann weiter
       router.replace('/profile');

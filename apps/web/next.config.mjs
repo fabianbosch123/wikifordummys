@@ -6,9 +6,13 @@ const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   transpilePackages: ['@wiki/shared'],
-  // In der Entwicklung leitet Next.js /api an die API weiter; in Produktion übernimmt das Caddy
+  // In der Entwicklung leitet Next.js /api und die OAuth-Metadaten an die API weiter; in Produktion übernimmt das Caddy
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${apiUrl}/api/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${apiUrl}/api/:path*` },
+      { source: '/.well-known/oauth-authorization-server', destination: `${apiUrl}/api/v1/.well-known/oauth-authorization-server` },
+      { source: '/.well-known/oauth-protected-resource/:path*', destination: `${apiUrl}/api/v1/.well-known/oauth-protected-resource/:path*` },
+    ];
   },
   async headers() {
     return [

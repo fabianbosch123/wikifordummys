@@ -29,6 +29,8 @@ import { MailService } from './mail/mail.service';
 import { McpController } from './mcp/mcp.controller';
 import { McpService } from './mcp/mcp.service';
 import { MeController } from './me/me.controller';
+import { OAuthController } from './oauth/oauth.controller';
+import { OAuthService } from './oauth/oauth.service';
 import { OfficeController } from './office/office.controller';
 import { OfficeService } from './office/office.service';
 import { PagesController } from './pages/pages.controller';
@@ -64,6 +66,7 @@ export class AppModule implements NestModule {
         MyTokensController,
         ApiAccessController,
         McpController,
+        OAuthController,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
@@ -97,6 +100,7 @@ export class AppModule implements NestModule {
         SearchService,
         ApiTokensService,
         McpService,
+        OAuthService,
         { provide: APP_GUARD, useClass: AuthGuard },
       ],
       exports: [PrismaService, AuthService, AuditService, UserAccessService, MailService, REDIS],

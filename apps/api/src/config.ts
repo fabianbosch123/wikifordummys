@@ -30,6 +30,8 @@ const schema = z
     /** MCP-Server: Aufrufe je Token und Minute sowie ändernde Aufrufe je Token und Stunde */
     RATE_MCP_PER_MINUTE: z.coerce.number().int().positive().default(120),
     RATE_MCP_WRITES_PER_HOUR: z.coerce.number().int().positive().default(120),
+    /** OAuth für den MCP-Server: Hosts, zu denen nach der Zustimmung zurückgeleitet werden darf (https), kommagetrennt */
+    OAUTH_REDIRECT_HOSTS: z.string().default('claude.ai,claude.com'),
     /** Verzeichnis für Anhänge, außerhalb des Web-Roots (S7); im Container ein eigenes Volume */
     ATTACHMENTS_DIR: z.string().min(1).default('/var/lib/wiki/attachments'),
     /** Höchstgröße eines Anhangs in MiB (S7) */

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ApiToken, Prisma } from '@prisma/client';
+import type { ApiToken, OAuthClient, Prisma } from '@prisma/client';
 import { API_TOKEN_MAX_PER_USER, type ApiAccessDto, type ApiTokenDto, type ApiTokenScope, type CreatedApiTokenDto, type MyApiTokensDto } from '@wiki/shared';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
@@ -12,7 +12,7 @@ import { PrismaService } from '../infra/prisma.service';
 
 /** Erkennbares Präfix: Secret-Scanner (z. B. von GitHub) und Menschen sehen sofort, was das ist */
 export const TOKEN_PREFIX = 'wfd_';
-const TOKEN_PATTERN = /^wfd_[A-Za-z0-9_-]{43}$/;
+export const TOKEN_PATTERN = /^wfd_[A-Za-z0-9_-]{43}$/;
 const SETTING_KEY = 'mcp';
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -48,9 +48,10 @@ export class ApiTokensService {
     return `${new URL(this.config.APP_ORIGIN).origin}/api/v1/mcp`;
   }
 
-  toDto(t: ApiToken, now = new Date()): ApiTokenDto {
+  toDto(t: ApiToken & { client?: Pick<OAuthClient, 'name'> | null }, now = new Date()): ApiTokenDto {
     return {
       id: t.id,
+      client: t.client?.name ?? null,
       name: t.name,
       prefix: t.prefix,
       scope: t.scope,
@@ -92,6 +93,7 @@ export class ApiTokensService {
     const since = this.visibleSince(now);
     const rows = await this.prisma.apiToken.findMany({
       where: { userId, OR: [{ revokedAt: null }, { revokedAt: { gt: since } }], expiresAt: { gt: since } },
+      include: { client: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return { enabled: await this.isEnabled(), endpoint: this.endpoint, tokens: rows.map((t) => this.toDto(t, now)) };
@@ -110,7 +112,8 @@ export class ApiTokensService {
     if (!(await this.isEnabled())) throw mcpDisabled();
     await this.auth.confirmTotp(ctx.user.id, input.code, { ip, userAgent }, 'api_token');
     const now = new Date();
-    const active = await this.prisma.apiToken.count({ where: { userId: ctx.user.id, revokedAt: null, expiresAt: { gt: now } } });
+    // OAuth-Zustimmungen zählen nicht mit; davon gibt es ohnehin nur eine je Client (oauth.service.ts)
+    const active = await this.prisma.apiToken.count({ where: { userId: ctx.user.id, clientId: null, revokedAt: null, expiresAt: { gt: now } } });
     if (active >= API_TOKEN_MAX_PER_USER) {
       throw Errors.badRequest(`Höchstens ${API_TOKEN_MAX_PER_USER} aktive Tokens je Benutzer. Bitte zuerst ein altes widerrufen.`, 'TOO_MANY_TOKENS');
     }
@@ -150,7 +153,7 @@ export class ApiTokensService {
     const since = this.visibleSince(now);
     const rows = await this.prisma.apiToken.findMany({
       where: { OR: [{ revokedAt: null }, { revokedAt: { gt: since } }], expiresAt: { gt: since } },
-      include: { user: { select: { id: true, displayName: true } } },
+      include: { user: { select: { id: true, displayName: true } }, client: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return {
@@ -185,6 +188,8 @@ export class ApiTokensService {
     const token = await this.prisma.apiToken.findUnique({ where: { tokenHash: this.crypto.sha256(raw) } });
     const now = new Date();
     if (!token || tokenStatus(token, now) !== 'active') return null;
+    // OAuth: das Access-Token gilt nur kurz und wird mit dem Refresh-Token erneuert
+    if (token.accessExpiresAt && token.accessExpiresAt <= now) return null;
     const user = await this.users.loadActive(token.userId);
     if (!user || user.mustChangePassword) return null;
     // Zuletzt verwendet: höchstens einmal pro Minute schreiben
