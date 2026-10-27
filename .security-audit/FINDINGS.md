@@ -182,7 +182,7 @@ Gate scheitert nur an den Medium-Findings: Sie müssen behoben oder als Risiko a
 - **How to fix:** Vor jedem post prüfen, dass der Rahmen noch geladen ist (z. B. nach 'init'), sonst nichts senden.
 - **Owner:** – · **Ticket:** – · **First seen:** R1
 
-### SEC-020 · Info · OAuth-Zweig (PR #19, nicht gemergt): offene Client-Registrierung und Zustimmungs-Phishing prüfen
+### SEC-020 · Info · OAuth (PR #19, während des Audits gemergt): offene Client-Registrierung und Zustimmungs-Phishing prüfen
 - **Where:** apps/api/src/oauth/oauth.service.ts:161 (OAuthService.register)
 - **Category:** A07:2025 · CWE-1021 · Confidence: Needs check
 - **Found by:** AI review

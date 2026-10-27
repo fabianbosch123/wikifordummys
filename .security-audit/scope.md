@@ -1,6 +1,6 @@
 # Security audit scope: wikifordummys
 
-- **Audited by:** Claude Code (Opus 5.5) · **Date:** 2026-10-27 · **Commit:** 1e85dbc (main), dazu Zweig `claude/project-thread-ueu291` @ 55da6b1 (OAuth, PR #19, nicht gemergt)
+- **Audited by:** Claude Code (Opus 5.5) · **Date:** 2026-10-27 · **Commit:** 1e85dbc (main), dazu Zweig `claude/project-thread-ueu291` @ 55da6b1 (OAuth, PR #19, inzwischen gemergt als db7cd59)
 - **Purpose and users:** Selbst gehostetes, Confluence-artiges Wiki mit Benutzerverwaltung (Spaces, Seitenbaum, Versionen, Anhänge, Suche, Office-Editor, draw.io, MCP-Zugang für Claude). 10–20 Benutzer.
 - **Stack:** TypeScript; Next.js 15 (Web), NestJS 11 (API), Prisma 6 / PostgreSQL 16, Redis 7, Caddy 2; Docker Compose; Bash-Installer und `wikictl`; Euro-Office (ONLYOFFICE-Fork), draw.io statisch.
 - **Exposure:** Internet-facing über Caddy (Betriebsart letsencrypt), alternativ internal oder hinter vorhandenem Proxy.

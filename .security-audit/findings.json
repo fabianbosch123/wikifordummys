@@ -1010,7 +1010,7 @@
     },
     {
       "id": "SEC-020",
-      "title": "OAuth-Zweig (PR #19, nicht gemergt): offene Client-Registrierung und Zustimmungs-Phishing prüfen",
+      "title": "OAuth (PR #19, während des Audits gemergt): offene Client-Registrierung und Zustimmungs-Phishing prüfen",
       "severity": "Info",
       "confidence": "Needs check",
       "owasp": "A07:2025",
