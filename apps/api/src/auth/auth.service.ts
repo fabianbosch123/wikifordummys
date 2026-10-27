@@ -3,6 +3,7 @@ import type { User } from '@prisma/client';
 import { APP_CONFIG, AppConfig } from '../config';
 import { AuditService } from '../audit/audit.service';
 import { Errors } from '../common/errors';
+import { clientNet } from '../common/request-context';
 import { CryptoService } from '../infra/crypto.service';
 import { PrismaService } from '../infra/prisma.service';
 import { RateLimitService } from '../infra/rate-limit.service';
@@ -41,13 +42,14 @@ export class AuthService {
 
   async login(email: string, password: string, client: ClientInfo): Promise<ActiveSession> {
     const acct = this.accountKey(email);
-    const perMinute = this.config.RATE_LOGIN_PER_MINUTE;
     await this.limiter.enforce([
-      { key: `login:ip:${client.ip}`, limit: perMinute, windowSec: 60 },
-      { key: `login:acct:${acct}`, limit: perMinute, windowSec: 60 },
+      { key: `login:ip:${client.ip}`, limit: this.config.RATE_LOGIN_PER_MINUTE, windowSec: 60 },
+      { key: `login:acct:${acct}`, limit: this.config.RATE_LOGIN_ACCOUNT_PER_MINUTE, windowSec: 60 },
     ]);
-    // Steigende Sperre nach Fehlversuchen; gilt gleichermaßen für unbekannte Adressen (S10)
-    await this.limiter.assertNotLocked(`login:${acct}`);
+    // Steigende Sperre nach Fehlversuchen je Konto und Netz des Absenders: Wer von woanders falsch rät, sperrt
+    // den Kontoinhaber nicht aus (SEC-002). Gilt gleichermaßen für unbekannte Adressen (S10).
+    const lockScope = `login:${acct}:${clientNet(client.ip)}`;
+    await this.limiter.assertNotLocked(lockScope);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
     const ok =
@@ -56,7 +58,7 @@ export class AuthService {
         : await this.passwords.verifyDummy(password);
 
     if (!user || !ok || user.status !== 'active') {
-      await this.limiter.registerFailure(`login:${acct}`);
+      await this.limiter.registerFailure(lockScope);
       if (user) {
         // Nicht abwarten, damit bekannte und unbekannte Adressen gleich lange brauchen (S10)
         void this.prisma.user
@@ -74,7 +76,7 @@ export class AuthService {
       throw Errors.invalidCredentials();
     }
 
-    await this.limiter.clearFailures(`login:${acct}`);
+    await this.limiter.clearFailures(lockScope);
     await this.prisma.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null } });
     await this.audit.log({ action: 'auth.login.password_ok', actorId: user.id, ip: client.ip });
     return this.sessions.create(user.id, user.totpEnabled ? 'password' : 'totp_setup', client.ip, client.userAgent);
@@ -185,11 +187,16 @@ export class AuthService {
    */
   async confirmTotp(userId: string, totpCode: string, client: ClientInfo, context: string): Promise<void> {
     await this.limiter.enforce([{ key: `2fa-confirm:acct:${userId}`, limit: this.config.RATE_LOGIN_PER_MINUTE, windowSec: 60 }]);
+    // Steigende Sperre wie bei der Anmeldung: Mit einer erbeuteten Sitzung lässt sich der Code so nicht erraten (SEC-008)
+    const scope = `2fa-confirm:${userId}`;
+    await this.limiter.assertNotLocked(scope);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!(await this.consumeTotp(user, totpCode))) {
-      await this.audit.log({ action: 'auth.2fa.failed', actorId: userId, ip: client.ip, details: { context } });
+      const failures = await this.limiter.registerFailure(scope);
+      await this.audit.log({ action: 'auth.2fa.failed', actorId: userId, ip: client.ip, details: { context, failures } });
       throw Errors.invalidCode();
     }
+    await this.limiter.clearFailures(scope);
   }
 
   async regenerateRecoveryCodes(userId: string, totpCode: string, client: ClientInfo): Promise<string[]> {
@@ -398,7 +405,7 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
-    await this.limiter.clearFailures(`login:${this.accountKey(user.email)}`);
+    await this.limiter.clearFailuresByPrefix(`login:${this.accountKey(user.email)}:`);
     const ended = await this.sessions.destroyAllForUser(user.id);
     const revokedTokens = await this.revokeApiTokens(user.id);
     await this.audit.log({

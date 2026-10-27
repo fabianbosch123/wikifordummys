@@ -126,6 +126,8 @@ Alle Dienste schreiben auf stdout; Docker begrenzt das auf 3 × 50 MB je Dienst.
 
 Wenn im Installer gewählt (nur bei direkter Erreichbarkeit, nicht hinter einem Proxy): Nach 10 fehlgeschlagenen Anmeldungen oder 2FA-Versuchen in 10 Minuten wird die IP für eine Stunde gesperrt. Das ergänzt die Rate-Limits der API (S3). Die Regel sitzt in der iptables-Kette `DOCKER-USER`, weil Docker veröffentlichte Ports an der normalen Firewall vorbeileitet. Private Netze werden nie gesperrt.
 
+IPv6: Damit Rate-Limits und fail2ban die echte IPv6-Adresse sehen und nicht die Gateway-Adresse des Docker-Netzes (sonst teilen sich alle IPv6-Benutzer ein Limit), schaltet der Installer bzw. `wikictl update` IPv6 im Docker-Netz ein (`WIKI_IPV6=true` in `.env`), wenn der Server IPv6 hat und Docker ab Version 27 läuft. Bei älterem Docker erscheint eine Warnung: Docker aktualisieren, die Zeile `WIKI_IPV6` aus `.env` löschen und `sudo wikictl update` aufrufen. Anmeldesperren nach Fehlversuchen gelten je Konto und Absendernetz (IPv4-Adresse bzw. IPv6-/64), damit Fremde ein Konto nicht für seinen Besitzer sperren können.
+
 ```bash
 sudo fail2ban-client status wikifordummys        # gesperrte IPs
 sudo fail2ban-client set wikifordummys unbanip 203.0.113.7

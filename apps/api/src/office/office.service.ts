@@ -254,7 +254,7 @@ export class OfficeService {
     if (!res.ok || !res.body) throw new Error(`Editor-Server antwortet mit ${res.status}`);
     const length = Number(res.headers.get('content-length') ?? 0);
     if (length > this.storage.maxBytes) throw Errors.tooLarge(this.config.ATTACHMENT_MAX_MB);
-    const stored = await this.storage.store(Readable.fromWeb(res.body as WebReadableStream));
+    const stored = await this.storage.store(Readable.fromWeb(res.body as WebReadableStream), length || null);
     if (stored.sizeBytes === 0) {
       await this.storage.remove([stored.storageKey]);
       throw new Error('Leere Datei vom Editor-Server');

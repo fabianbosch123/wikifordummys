@@ -612,6 +612,7 @@ check_ports() {
 start_stack() {
   step "Wiki bauen und starten"
   check_ports
+  ipv6_setup
   if [[ ${WIKI_SKIP_BUILD:-0} != 1 ]]; then
     info "Baue die Images aus dem Quellcode (beim ersten Mal einige Minuten) …"
     compose build --pull

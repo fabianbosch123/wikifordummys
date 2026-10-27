@@ -62,7 +62,22 @@ export function DrawioDialog({
       setStatus('draw.io antwortet nicht. Läuft der Dienst drawio (wikictl status)?');
       setFailed(true);
     }, 30_000);
-    const post = (msg: object) => frame.current?.contentWindow?.postMessage(JSON.stringify(msg), '*');
+    // Der Rahmen hat wegen sandbox den Ursprung "null", ein Ziel-Ursprung lässt sich deshalb nicht angeben. Gesendet wird
+    // erst, wenn sich draw.io im Rahmen gemeldet hat, und nicht mehr, sobald der Rahmen eine andere Seite lädt (SEC-019).
+    let drawio: Window | null = null;
+    let loads = 0;
+    const onFrameLoad = () => {
+      if (++loads < 2) return;
+      drawio = null;
+      setStatus('draw.io wurde neu geladen. Bitte schließen und die Zeichnung erneut öffnen.');
+      setFailed(true);
+    };
+    const frameEl = frame.current;
+    frameEl?.addEventListener('load', onFrameLoad);
+    const post = (msg: object) => {
+      const target = frame.current?.contentWindow;
+      if (target && target === drawio) target.postMessage(JSON.stringify(msg), '*');
+    };
 
     async function load() {
       const { drawing: d, title: t } = latest.current;
@@ -119,6 +134,7 @@ export function DrawioDialog({
       if (!frame.current || e.source !== frame.current.contentWindow) return;
       const msg = parseMessage(e.data);
       if (!msg) return;
+      if (msg.event === 'configure' || msg.event === 'init') drawio = e.source as Window;
       switch (msg.event) {
         case 'configure':
           window.clearTimeout(timeout);
@@ -146,6 +162,7 @@ export function DrawioDialog({
     return () => {
       window.clearTimeout(timeout);
       window.removeEventListener('message', onMessage);
+      frameEl?.removeEventListener('load', onFrameLoad);
     };
   }, []);
 

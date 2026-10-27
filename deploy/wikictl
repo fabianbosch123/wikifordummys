@@ -169,6 +169,7 @@ cmd_update_apply() {
   local before=${1:-}
   if [[ -z $(env_get WIKI_OFFICE) ]]; then offer_office; fi
   if [[ -z $(env_get WIKI_DRAWIO) ]]; then offer_drawio; fi
+  ipv6_setup
   step "Bauen und neu starten"
   compose build --pull
   if [[ $(env_get WIKI_OFFICE) != true ]]; then
@@ -497,7 +498,7 @@ cmd_restore() {
   step "Starten"
   # Sitzungen und Sperren gehören zum alten Stand
   # shellcheck disable=SC2016 # $REDIS_PASSWORD wird im Container aufgelöst
-  compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL' >/dev/null || true
+  compose exec -T redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli FLUSHALL' >/dev/null || true
   compose up -d
   wait_healthy 300 || die "Die API ist nach der Wiederherstellung nicht gesund; Logs: wikictl logs api"
   ok "Wiederherstellung abgeschlossen. Alle Benutzer müssen sich neu anmelden."

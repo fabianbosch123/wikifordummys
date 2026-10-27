@@ -200,6 +200,28 @@ office_set() {
   fi
 }
 
+# IPv6 im Docker-Netz frontend (SEC-013): Ohne sieht die API bei IPv6-Zugriffen nur die Gateway-Adresse des
+# Docker-Netzes, und Rate-Limits und fail2ban träfen alle IPv6-Benutzer zugleich. Braucht Docker ab 27 (vergibt dann
+# selbst ein IPv6-Netz und leitet ohne userland-proxy weiter) und IPv6 im Kernel, sonst startet das Netz nicht.
+# Wird nur gesetzt, wenn WIKI_IPV6 noch nicht in .env steht; ein Wert von Hand bleibt erhalten.
+ipv6_setup() {
+  [[ -z $(env_get WIKI_IPV6) ]] || return 0
+  local major has_v6=0
+  major=$(docker version -f '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
+  if [[ $(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null) == 0 ]] && ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
+    has_v6=1
+  fi
+  if ((has_v6)) && ((${major:-0} >= 27)); then
+    env_set WIKI_IPV6 true
+    ok "IPv6 im Docker-Netz eingeschaltet; die API sieht die echten IPv6-Adressen."
+  else
+    env_set WIKI_IPV6 false
+    if ((has_v6)); then
+      warn "Der Server hat IPv6, Docker ist aber älter als 27: IPv6-Zugriffe teilen sich die Rate-Limits. Docker aktualisieren und WIKI_IPV6 aus .env löschen."
+    fi
+  fi
+}
+
 # Arbeitsspeicher in GB (abgerundet) und ob er für Wiki plus Office-Editor reicht (8 GB empfohlen)
 mem_gb() { awk '/MemTotal/ {print int($2 / 1024 / 1024)}' /proc/meminfo 2>/dev/null || echo 0; }
 office_mem_ok() { (($(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0) >= 7000000)); }

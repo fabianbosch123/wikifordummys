@@ -18,13 +18,15 @@ const schema = z
     /** Mindestens 32 Zeichen; Schlüssel für HMACs (Wiederherstellungscodes, Rate-Limit-Schlüssel) */
     SESSION_SECRET: z.string().min(32),
     /** false nur für lokale Entwicklung über http */
-    COOKIE_SECURE: bool.default('true'),
+    COOKIE_SECURE: bool.prefault('true'),
     /** Anzahl vertrauenswürdiger Proxys vor der API (Caddy = 1) */
     TRUST_PROXY: z.coerce.number().int().min(0).default(1),
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string().default('wikifordummys <wiki@localhost>'),
     /** Rate-Limits (S3) */
     RATE_LOGIN_PER_MINUTE: z.coerce.number().int().positive().default(5),
+    /** Anmeldeversuche je Konto und Minute über alle IPs zusammen; großzügig, damit Fremde ein Konto nicht aussperren (SEC-002) */
+    RATE_LOGIN_ACCOUNT_PER_MINUTE: z.coerce.number().int().positive().default(30),
     RATE_RESET_PER_HOUR: z.coerce.number().int().positive().default(3),
     RATE_API_PER_MINUTE: z.coerce.number().int().positive().default(300),
     /** MCP-Server: Aufrufe je Token und Minute sowie ändernde Aufrufe je Token und Stunde */
@@ -36,8 +38,14 @@ const schema = z
     ATTACHMENTS_DIR: z.string().min(1).default('/var/lib/wiki/attachments'),
     /** Höchstgröße eines Anhangs in MiB (S7) */
     ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(1024).default(ATTACHMENT_DEFAULT_MAX_MB),
+    /** Unter so viel freiem Platz (MiB) im Anhang-Verzeichnis nimmt die API keine Dateien mehr an (SEC-003) */
+    ATTACHMENT_MIN_FREE_MB: z.coerce.number().int().min(0).default(2048),
+    /** Höchstens so viele MiB Anhänge und Fassungen je Benutzer in 24 Stunden (SEC-003) */
+    ATTACHMENT_QUOTA_MB_PER_DAY: z.coerce.number().int().min(1).default(2048),
+    /** Uploads (Anhänge und Fassungen) je Benutzer und Stunde */
+    RATE_UPLOADS_PER_HOUR: z.coerce.number().int().positive().default(300),
     /** Office-Editor (Euro-Office) zum Ansehen und Bearbeiten von Office-Anhängen */
-    OFFICE_ENABLED: bool.default('false'),
+    OFFICE_ENABLED: bool.prefault('false'),
     /** Gemeinsames JWT-Geheimnis mit dem Editor-Server, mindestens 32 Zeichen */
     OFFICE_JWT_SECRET: z.string().optional(),
     /** Adresse des Editor-Servers im internen Docker-Netz; von dort holt die API gespeicherte Fassungen */
@@ -45,7 +53,7 @@ const schema = z
     /** Adresse, unter der der Editor-Server die API erreicht (Datei abholen, Rückruf nach dem Speichern) */
     OFFICE_API_URL: z.string().url().default('http://api:3001'),
     /** Zeichnungen mit draw.io (Dienst drawio unter /draw/); ohne bleiben vorhandene Zeichnungen sichtbar, aber nicht bearbeitbar */
-    DRAWIO_ENABLED: bool.default('false'),
+    DRAWIO_ENABLED: bool.prefault('false'),
     /** Argon2-Kosten; nur in Tests herabsetzen */
     ARGON2_MEMORY_KIB: z.coerce.number().int().min(1024).default(65536),
     ARGON2_TIME_COST: z.coerce.number().int().min(1).default(3),

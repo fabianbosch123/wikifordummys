@@ -140,6 +140,8 @@ jobs:
       - name: Status, Sicherung, Test-Wiederherstellung, Wiederherstellung
         run: |
           sudo wikictl status
+          # IPv6 im Docker-Netz: Der Installer entscheidet selbst und schreibt das Ergebnis in .env (SEC-013)
+          sudo grep -Eq "^WIKI_IPV6='(true|false)'" .env
           sudo wikictl backup
           sudo wikictl restore-test
           sudo wikictl restore latest --yes

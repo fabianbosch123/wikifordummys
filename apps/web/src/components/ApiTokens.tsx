@@ -42,7 +42,8 @@ export function ApiTokens() {
   const scopeId = useId();
   const lifetimeId = useId();
   const [data, setData] = useState<MyApiTokensDto | null>(null);
-  const [form, setForm] = useState({ name: '', scope: 'write' as ApiTokenScope, expiresInDays: 90, code: '' });
+  // Standard „Nur lesen“: Liest Claude präparierte Seiten, kann es so nichts ändern (SEC-006)
+  const [form, setForm] = useState({ name: '', scope: 'read' as ApiTokenScope, expiresInDays: 90, code: '' });
   const [created, setCreated] = useState<CreatedApiTokenDto | null>(null);
   const [error, setError] = useState('');
 
@@ -153,8 +154,8 @@ export function ApiTokens() {
           <div className="field">
             <label htmlFor={scopeId}>Rechte</label>
             <select id={scopeId} value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value as ApiTokenScope })}>
-              <option value="write">{SCOPE_LABEL.write}</option>
               <option value="read">{SCOPE_LABEL.read}</option>
+              <option value="write">{SCOPE_LABEL.write}</option>
             </select>
           </div>
           <div className="field">

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync }
 import { join } from 'node:path';
 import type { AttachmentDto } from '@wiki/shared';
 import { AttachmentStorageService } from '../src/attachments/attachment-storage.service';
+import { APP_CONFIG, type AppConfig } from '../src/config';
 import { PagesService } from '../src/pages/pages.service';
 import { Account, Client, createUser, resetState, startApp, TestContext } from './helpers';
 import { createPage, createSpace, PNG } from './fixtures';
@@ -127,6 +128,33 @@ describe('Anhänge hochladen und abrufen', () => {
     expect(readdirSync(join(dir, 'tmp'))).toEqual([]);
     // Genau an der Grenze ist erlaubt
     expect((await anna.client.upload(pageId, 'grenze.bin', Buffer.alloc(1024 * 1024, 1))).status).toBe(201);
+  });
+
+  it('begrenzt die Menge je Benutzer und Tag und lehnt Uploads bei knappem Platz ab (SEC-003)', async () => {
+    const config = ctx.app.get<AppConfig>(APP_CONFIG);
+    const { ATTACHMENT_QUOTA_MB_PER_DAY: quota, ATTACHMENT_MIN_FREE_MB: reserve } = config;
+    try {
+      config.ATTACHMENT_QUOTA_MB_PER_DAY = 2;
+      const mb = Buffer.alloc(1024 * 1024, 1);
+      expect((await anna.client.upload(pageId, 'a.bin', mb)).status).toBe(201);
+      expect((await anna.client.upload(pageId, 'b.bin', mb)).status).toBe(201);
+      const third = await anna.client.upload(pageId, 'c.bin', Buffer.alloc(10, 1));
+      expect(third.status).toBe(413);
+      expect(third.body.error.code).toBe('QUOTA_EXCEEDED');
+      // Andere Benutzer haben ihr eigenes Kontingent
+      expect((await bernd.client.upload(pageId, 'd.bin', Buffer.alloc(10, 1))).status).toBe(201);
+
+      config.ATTACHMENT_QUOTA_MB_PER_DAY = quota;
+      const free = await ctx.app.get(AttachmentStorageService).freeBytes();
+      config.ATTACHMENT_MIN_FREE_MB = Math.ceil(free / 1024 / 1024) + 1;
+      const full = await bernd.client.upload(pageId, 'e.bin', Buffer.alloc(10, 1));
+      expect(full.status).toBe(507);
+      expect(full.body.error.code).toBe('STORAGE_FULL');
+      expect(readdirSync(join(dir, 'tmp'))).toEqual([]);
+    } finally {
+      config.ATTACHMENT_QUOTA_MB_PER_DAY = quota;
+      config.ATTACHMENT_MIN_FREE_MB = reserve;
+    }
   });
 
   it('räumt halbe Uploads aus abgebrochenen Anfragen weg, laufende bleiben', async () => {

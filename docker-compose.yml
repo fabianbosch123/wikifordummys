@@ -6,6 +6,11 @@ x-logging: &logging
   driver: json-file
   options: { max-size: 50m, max-file: "3" }
 
+# Härtung (SEC-012): keine Rechteausweitung über setuid-Programme; wo möglich ohne Linux-Fähigkeiten
+x-hardened: &hardened
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
 services:
   caddy:
     image: caddy:2
@@ -26,6 +31,9 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web, api]
+    # Läuft als root im Container, braucht aber nur das Binden an die Ports 80 und 443
+    <<: *hardened
+    cap_add: [NET_BIND_SERVICE]
     networks: [frontend, office, drawio]
     logging: *logging
 
@@ -39,6 +47,7 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+    <<: *hardened
     networks: [frontend]
     logging: *logging
 
@@ -58,6 +67,10 @@ services:
       # Proxys vor der API: Caddy = 1, im Proxy-Betrieb zusätzlich der vorhandene Reverse Proxy = 2
       TRUST_PROXY: ${WIKI_TRUST_PROXY_HOPS:-1}
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-50}
+      # Schutz vor voller Platte (SEC-003): freie Reserve, Upload-Menge je Benutzer und Tag, Uploads je Stunde
+      ATTACHMENT_MIN_FREE_MB: ${ATTACHMENT_MIN_FREE_MB:-2048}
+      ATTACHMENT_QUOTA_MB_PER_DAY: ${ATTACHMENT_QUOTA_MB_PER_DAY:-2048}
+      RATE_UPLOADS_PER_HOUR: ${RATE_UPLOADS_PER_HOUR:-300}
       # Office-Editor (Dienst office, nur mit WIKI_OFFICE=true): gemeinsames Geheimnis für die signierten Nachrichten
       OFFICE_ENABLED: ${WIKI_OFFICE:-false}
       OFFICE_JWT_SECRET: ${OFFICE_JWT_SECRET:-}
@@ -76,6 +89,7 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
+    <<: *hardened
     # frontend für Caddy und ausgehende Mails, backend für Datenbank und Redis, office für den Editor-Server
     networks: [frontend, backend, office]
     logging: *logging
@@ -151,27 +165,41 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    # Der Start wechselt per gosu zum Benutzer postgres und braucht dafür Fähigkeiten; nur keine Rechteausweitung
+    security_opt: ["no-new-privileges:true"]
     networks: [backend]
     logging: *logging
 
   redis:
     image: redis:7
     restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    # Passwort über eine Konfigurationsdatei statt als Argument, sonst steht es in ps und docker inspect (SEC-012).
+    # docker-entrypoint.sh wechselt danach zum Benutzer redis, der die Datei lesen darf.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        umask 077 && printf 'requirepass %s\n' "$$REDIS_PASSWORD" >/tmp/redis.conf && chown redis:redis /tmp/redis.conf &&
+        exec docker-entrypoint.sh redis-server /tmp/redis.conf --appendonly yes
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+    security_opt: ["no-new-privileges:true"]
     networks: [backend]
     logging: *logging
 
 networks:
-  frontend: {}
+  # IPv6 im Docker-Netz (WIKI_IPV6=true, setzen install.sh und wikictl, wenn der Server IPv6 hat und Docker ab 27 läuft):
+  # Dann sieht die API die echte IPv6-Adresse statt der Gateway-Adresse des Docker-Netzes, und Rate-Limits und
+  # fail2ban treffen nur den Absender, nicht alle IPv6-Benutzer zugleich (SEC-013)
+  frontend:
+    enable_ipv6: ${WIKI_IPV6:-false}
   # Kein Zugang nach außen: Datenbank und Redis sind nur für die API erreichbar
   backend: { internal: true }
   # Editor-Server: erreichbar nur für Caddy und API, selbst ohne Zugang ins Internet

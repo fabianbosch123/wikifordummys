@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { mkdir, open as openFile, readdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, open as openFile, readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -70,8 +70,31 @@ export class AttachmentStorageService implements OnModuleInit {
     return join(this.config.ATTACHMENTS_DIR, storageKey.slice(0, 2), storageKey);
   }
 
-  /** Schreibt den Datenstrom in eine neue Datei; bricht bei Überschreiten der Höchstgröße mit 413 ab */
-  async store(input: Readable): Promise<StoredFile> {
+  /** Freier Platz im Anhang-Verzeichnis in Byte */
+  async freeBytes(): Promise<number> {
+    await mkdir(this.config.ATTACHMENTS_DIR, { recursive: true, mode: 0o700 });
+    const fs = await statfs(this.config.ATTACHMENTS_DIR);
+    return fs.bavail * fs.bsize;
+  }
+
+  /**
+   * Wirft 507, wenn nach dem Speichern von `bytes` weniger als ATTACHMENT_MIN_FREE_MB frei blieben (SEC-003).
+   * Eine volle Platte hält sonst auch die Datenbank an, die auf demselben Datenträger liegt.
+   */
+  async assertSpace(bytes: number): Promise<void> {
+    const reserve = this.config.ATTACHMENT_MIN_FREE_MB * 1024 * 1024;
+    if ((await this.freeBytes()) - bytes < reserve) {
+      this.logger.error(`Anhang abgelehnt: weniger als ${this.config.ATTACHMENT_MIN_FREE_MB} MiB frei im Anhang-Verzeichnis`);
+      throw Errors.storageFull();
+    }
+  }
+
+  /**
+   * Schreibt den Datenstrom in eine neue Datei; bricht bei Überschreiten der Höchstgröße mit 413 ab.
+   * Vorher muss genug Platz frei sein (ohne angekündigte Länge wird mit der Höchstgröße gerechnet).
+   */
+  async store(input: Readable, declaredLength: number | null = null): Promise<StoredFile> {
+    await this.assertSpace(declaredLength ?? this.maxBytes);
     const storageKey = randomUUID();
     const tmpDir = join(this.config.ATTACHMENTS_DIR, 'tmp');
     const tmp = join(tmpDir, storageKey);

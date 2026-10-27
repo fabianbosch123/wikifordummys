@@ -1,4 +1,4 @@
-import { deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync, deflateSync } from 'node:zlib';
 import { DrawingError, embedXml, extractXml, labelText, parseDrawio, readableXml, renderDrawing } from './drawio';
 
 const MODEL = `<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>
@@ -19,6 +19,29 @@ describe('draw.io-Zeichnungen für den MCP-Server', () => {
     const xml = extractXml(d.png)!;
     expect(xml).toMatch(/^<mxfile host="wikifordummys"><diagram name="Seite-1" id="seite-1"><mxGraphModel>/);
     expect(parseDrawio(xml)[0].model).toEqual(parseDrawio(MODEL)[0].model);
+  });
+
+  it('bricht Entpack-Bomben ab, statt den Speicher zu füllen (SEC-001)', () => {
+    // 20 MB Nullbytes ergeben komprimiert nur rund 20 KB
+    const bomb = deflateRawSync(Buffer.alloc(20 * 1024 * 1024)).toString('base64');
+    expect(() => parseDrawio(`<mxfile><diagram name="a" id="a">${bomb}</diagram></mxfile>`)).toThrow(DrawingError);
+    // Viele kleinere Bomben zählen zusammen
+    const page = `<mxGraphModel><root><mxCell id="0" value="${'a'.repeat(900_000)}"/></root></mxGraphModel>`;
+    const small = deflateRawSync(Buffer.from(encodeURIComponent(page))).toString('base64');
+    const many = Array.from({ length: 4 }, (_, i) => `<diagram name="s${i}" id="s${i}">${small}</diagram>`).join('');
+    expect(() => parseDrawio(`<mxfile>${many}</mxfile>`)).toThrow(/zu groß/);
+
+    // zTXt-Block in einem hochgeladenen PNG
+    const png = renderDrawing(MODEL).png;
+    const data = Buffer.concat([Buffer.from('mxGraphModel\0\0', 'latin1'), deflateSync(Buffer.alloc(20 * 1024 * 1024))]);
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(data.length, 0);
+    head.write('zTXt', 4, 'latin1');
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
+    const withoutXml = png.subarray(0, 33);
+    const bombPng = Buffer.concat([withoutXml, head, data, crc, png.subarray(png.length - 12)]);
+    expect(extractXml(bombPng)).toBeNull();
   });
 
   it('liest komprimierte Diagramme aus draw.io Desktop', () => {

@@ -14,6 +14,11 @@ import { XMLBuilder, XMLParser } from 'fast-xml-parser';
  */
 
 export const MAX_DRAWING_XML = 1_000_000;
+/**
+ * Obergrenze für entpackte Daten (komprimierte Seiten, zTXt-Blöcke) je Zeichnung, zusammengezählt über alle Seiten.
+ * Schutz vor Entpack-Bomben: deflate packt gleichförmige Daten etwa 1:1000. URI-kodiertes XML ist bis zu dreimal so lang.
+ */
+export const MAX_INFLATED = 3 * MAX_DRAWING_XML;
 const MAX_CELLS = 5_000;
 /** Doppelte Auflösung wie beim Speichern aus draw.io (EXPORT_SCALE in der Weboberfläche) */
 const SCALE = 2;
@@ -48,10 +53,30 @@ function parseXml(xml: string): XmlNode {
   }
 }
 
-/** Komprimierte Diagramme (Standard in draw.io Desktop): Base64 → deflate (raw) → URI-kodiert */
-function decompressDiagram(text: string): string {
+/** Entpackt höchstens maxBytes; mehr gilt als Fehler (zlib bricht dann selbst ab, ohne den Speicher zu füllen) */
+function inflateLimited(inflate: typeof inflateSync, data: Buffer, maxBytes: number): Buffer {
+  if (maxBytes <= 0) throw new DrawingError('Die Zeichnung ist entpackt zu groß.');
   try {
-    return decodeURIComponent(inflateRawSync(Buffer.from(text.trim(), 'base64')).toString('latin1'));
+    return inflate(data, { maxOutputLength: maxBytes });
+  } catch (err) {
+    if (err instanceof RangeError || (err as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new DrawingError('Die Zeichnung ist entpackt zu groß.');
+    }
+    throw err;
+  }
+}
+
+/** Komprimierte Diagramme (Standard in draw.io Desktop): Base64 → deflate (raw) → URI-kodiert */
+function decompressDiagram(text: string, maxBytes: number): string {
+  let raw: Buffer;
+  try {
+    raw = inflateLimited(inflateRawSync, Buffer.from(text.trim(), 'base64'), maxBytes);
+  } catch (err) {
+    if (err instanceof DrawingError) throw err;
+    throw new DrawingError('Das komprimierte Diagramm ließ sich nicht entpacken.');
+  }
+  try {
+    return decodeURIComponent(raw.toString('latin1'));
   } catch {
     throw new DrawingError('Das komprimierte Diagramm ließ sich nicht entpacken.');
   }
@@ -74,10 +99,16 @@ export function parseDrawio(xml: string): Diagram[] {
   const file = doc.mxfile as XmlNode | undefined;
   const diagrams = (file?.diagram as XmlNode[] | undefined) ?? [];
   if (!diagrams.length) throw new DrawingError('Erwartet wird <mxfile> mit <diagram> oder ein <mxGraphModel>.');
+  // Budget für alle Seiten zusammen: viele kleine Bomben dürfen sich nicht aufsummieren
+  let budget = MAX_INFLATED;
   return diagrams.map((d, i) => {
     let model = d.mxGraphModel as XmlNode | undefined;
     const text = typeof d['#text'] === 'string' ? d['#text'].trim() : '';
-    if (!model && text) model = parseXml(decompressDiagram(text)).mxGraphModel as XmlNode | undefined;
+    if (!model && text) {
+      const inner = decompressDiagram(text, budget);
+      budget -= inner.length;
+      model = parseXml(inner).mxGraphModel as XmlNode | undefined;
+    }
     if (!model) throw new DrawingError(`Seite ${i + 1} der Zeichnung enthält kein <mxGraphModel>.`);
     return { name: String(d.name ?? `Seite-${i + 1}`), id: String(d.id ?? `seite-${i + 1}`), model };
   });
@@ -555,7 +586,7 @@ export function extractXml(png: Buffer): string | null {
       if (c.type === 'tEXt' && key === 'mxfile') return decodeURIComponent(c.data.toString('latin1', zero + 1));
       // zTXt: Schlüssel, 0, Kompressionsverfahren (0 = deflate mit zlib-Kopf)
       if (c.type === 'zTXt' && key === 'mxGraphModel') {
-        return decodeURIComponent(inflateSync(c.data.subarray(zero + 2)).toString('latin1'));
+        return decodeURIComponent(inflateLimited(inflateSync, c.data.subarray(zero + 2), MAX_INFLATED).toString('latin1'));
       }
     } catch {
       return null;
