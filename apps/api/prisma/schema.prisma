@@ -2,6 +2,7 @@
 // Meilenstein 2: Spaces, Seitenbaum, Seitenversionen.
 // Meilenstein 3: Space-Rollen, Seiteneinschränkungen, Anhänge, Volltextsuche.
 // Meilenstein 4: Einstellungen aus der Administration (SMTP).
+// MCP-Server: API-Token je Benutzer für Claude und andere MCP-Clients.
 
 generator client {
   provider      = "prisma-client-js"
@@ -58,6 +59,7 @@ model User {
   restrictions       PageRestriction[]
   attachments        Attachment[]
   attachmentVersions AttachmentVersion[]
+  apiTokens          ApiToken[]
 
   @@map("users")
 }
@@ -339,4 +341,31 @@ model Setting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+enum ApiTokenScope {
+  read
+  write
+}
+
+/// API-Token für den MCP-Server. Gespeichert wird nur der SHA-256 des Tokens; das Token selbst sieht
+/// der Benutzer einmal beim Anlegen. Es handelt immer mit den Rechten seines Benutzers.
+model ApiToken {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  /// Wofür das Token gedacht ist, z. B. „Claude Desktop Laptop“
+  name       String
+  tokenHash  String        @unique @map("token_hash")
+  /// Die ersten Zeichen des Tokens, damit man es in Listen wiedererkennt
+  prefix     String
+  scope      ApiTokenScope
+  expiresAt  DateTime      @map("expires_at")
+  lastUsedAt DateTime?     @map("last_used_at")
+  lastUsedIp String?       @map("last_used_ip")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  revokedAt  DateTime?     @map("revoked_at")
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_tokens")
 }

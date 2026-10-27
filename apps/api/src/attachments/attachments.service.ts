@@ -173,6 +173,16 @@ export class AttachmentsService {
     }));
   }
 
+  /** Datei einer Fassung ohne Rechteprüfung; vorher load() aufrufen */
+  async versionFile(attachmentId: string, version: number): Promise<{ storageKey: string; version: number }> {
+    const row = await this.prisma.attachmentVersion.findUnique({
+      where: { attachmentId_version: { attachmentId, version } },
+      select: { storageKey: true, version: true },
+    });
+    if (!row) throw Errors.notFound();
+    return row;
+  }
+
   /**
    * Ältere Fassungen gibt es zum Herunterladen; der Dateiname bekommt die Fassung angehängt.
    * Mit inline zeigt der Browser Bilder und PDF an (Zeichnungen auf Seiten verweisen auf eine feste Fassung).

@@ -7,8 +7,11 @@ import { Errors } from './errors';
 import type { WikiRequest } from './request-context';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-/** Rückruf des Office-Editor-Servers: kommt ohne Cookies, ist stattdessen per JWT signiert (office.service.ts) */
-const EXEMPT_PATHS = new Set(['/api/v1/office/callback']);
+/**
+ * Ohne Cookies und deshalb ohne CSRF-Risiko: der Rückruf des Office-Editor-Servers (per JWT signiert, office.service.ts)
+ * und der MCP-Server (nur API-Token im Authorization-Header, mcp.controller.ts)
+ */
+const EXEMPT_PATHS = new Set(['/api/v1/office/callback', '/api/v1/mcp']);
 
 /**
  * CSRF-Schutz (S5): SameSite-Cookies plus Double Submit.

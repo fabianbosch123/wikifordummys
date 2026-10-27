@@ -11,6 +11,8 @@ const FILTERS = [
   { value: 'auth.2fa', label: '2FA' },
   { value: 'auth.password', label: 'Passwörter' },
   { value: 'admin', label: 'Admin-Aktionen' },
+  { value: 'mcp', label: 'Claude (MCP)' },
+  { value: 'token', label: 'API-Tokens' },
 ];
 
 const PAGE = 100;

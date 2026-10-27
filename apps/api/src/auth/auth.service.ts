@@ -179,13 +179,21 @@ export class AuthService {
     return { session: full, recoveryCodes: codes };
   }
 
-  async regenerateRecoveryCodes(userId: string, totpCode: string, client: ClientInfo): Promise<string[]> {
-    await this.limiter.enforce([{ key: `2fa-regen:acct:${userId}`, limit: this.config.RATE_LOGIN_PER_MINUTE, windowSec: 60 }]);
+  /**
+   * Bestätigung einer heiklen Aktion mit dem aktuellen 2FA-Code (z. B. neue Wiederherstellungscodes, API-Token).
+   * Wirft 401 INVALID_CODE; Fehlversuche landen im Audit-Log und zählen für fail2ban.
+   */
+  async confirmTotp(userId: string, totpCode: string, client: ClientInfo, context: string): Promise<void> {
+    await this.limiter.enforce([{ key: `2fa-confirm:acct:${userId}`, limit: this.config.RATE_LOGIN_PER_MINUTE, windowSec: 60 }]);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!(await this.consumeTotp(user, totpCode))) {
-      await this.audit.log({ action: 'auth.2fa.failed', actorId: userId, ip: client.ip, details: { context: 'recovery_codes' } });
+      await this.audit.log({ action: 'auth.2fa.failed', actorId: userId, ip: client.ip, details: { context } });
       throw Errors.invalidCode();
     }
+  }
+
+  async regenerateRecoveryCodes(userId: string, totpCode: string, client: ClientInfo): Promise<string[]> {
+    await this.confirmTotp(userId, totpCode, client, 'recovery_codes');
     const codes = this.totp.generateRecoveryCodes();
     await this.prisma.$transaction([
       this.prisma.recoveryCode.deleteMany({ where: { userId } }),
@@ -326,9 +334,16 @@ export class AuthService {
       if (count < 1) throw Errors.invalidToken();
       await tx.user.update({ where: { id: reset.userId }, data: { passwordHash } });
     });
-    // Alle Sitzungen beenden (S4); die 2FA bleibt bestehen
+    // Alle Sitzungen beenden (S4) und API-Tokens widerrufen; die 2FA bleibt bestehen
     await this.sessions.destroyAllForUser(reset.userId);
+    await this.revokeApiTokens(reset.userId);
     await this.audit.log({ action: 'auth.password.reset', actorId: reset.userId, ip: client.ip });
+  }
+
+  /** Widerruft alle API-Tokens (MCP) eines Kontos, z. B. wenn ein Fremder das Passwort kennen könnte */
+  async revokeApiTokens(userId: string): Promise<number> {
+    const { count } = await this.prisma.apiToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    return count;
   }
 
   // ---------- Passwort ändern ----------
@@ -360,7 +375,7 @@ export class AuthService {
   /**
    * Setzt ein zufälliges Startpasswort, das nach der nächsten Anmeldung geändert werden muss.
    * Für den ersten Administrator und für den Fall, dass der Mailversand nicht funktioniert.
-   * Eingeladene Konten werden dabei aktiviert, offene Einladungen ungültig; alle Sitzungen enden.
+   * Eingeladene Konten werden dabei aktiviert, offene Einladungen ungültig; alle Sitzungen und API-Tokens enden.
    * Die eingerichtete 2FA bleibt bestehen.
    */
   async issueStartPassword(userId: string): Promise<string> {
@@ -385,11 +400,12 @@ export class AuthService {
     ]);
     await this.limiter.clearFailures(`login:${this.accountKey(user.email)}`);
     const ended = await this.sessions.destroyAllForUser(user.id);
+    const revokedTokens = await this.revokeApiTokens(user.id);
     await this.audit.log({
       action: 'cli.password.issued',
       targetType: 'user',
       targetId: user.id,
-      details: { email: user.email, endedSessions: ended },
+      details: { email: user.email, endedSessions: ended, revokedTokens },
     });
     return password;
   }
