@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AttachmentDto } from '@wiki/shared';
+import type { ApiErrorBody, AttachmentDto, NewOfficeKind } from '@wiki/shared';
 import { clearCache } from './cache';
 
 export class ApiError extends Error {
@@ -91,6 +91,11 @@ async function sendFile(path: string, file: Blob): Promise<AttachmentDto> {
 /** Lädt eine Datei als Anhang einer Seite hoch; der Inhalt geht direkt als Body an die API */
 export function uploadAttachment(pageId: string, file: File): Promise<AttachmentDto> {
   return sendFile(`/pages/${pageId}/attachments?filename=${encodeURIComponent(file.name)}`, file);
+}
+
+/** Legt ein leeres Word-, Excel- oder PowerPoint-Dokument als Anhang der Seite an */
+export function createOfficeFile(pageId: string, kind: NewOfficeKind, name: string): Promise<AttachmentDto> {
+  return api<AttachmentDto>(`/pages/${pageId}/office-files`, { method: 'POST', body: { kind, name } });
 }
 
 /** Speichert eine Datei als neue Fassung eines vorhandenen Anhangs (z. B. eine bearbeitete Zeichnung) */

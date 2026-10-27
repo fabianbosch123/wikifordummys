@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { Inject, Injectable, Logger, StreamableFile } from '@nestjs/common';
-import type { OfficeEditorDto } from '@wiki/shared';
+import type { AttachmentDto, OfficeEditorDto } from '@wiki/shared';
 import { AttachmentStorageService } from '../attachments/attachment-storage.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { AuditService } from '../audit/audit.service';
@@ -12,6 +12,7 @@ import type { AuthContext } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
 import { matchesFormat, OFFICE_MAGIC_BYTES, officeFormat } from './formats';
 import { JwtClaims, signJwt, verifyJwt } from './jwt';
+import { emptyOfficeFile, NEW_OFFICE_KINDS, type NewOfficeKind } from './templates';
 
 /** Öffentlicher Pfad des Editor-Servers auf der Domain des Wikis (Caddy leitet ihn an den Container weiter) */
 export const OFFICE_PATH = '/office';
@@ -109,6 +110,17 @@ export class OfficeService {
     };
   }
 
+  /**
+   * Legt ein leeres Dokument als Anhang der Seite an. Es zählt wie ein Upload (Rechte, Begrenzungen, Typprüfung);
+   * nur bei eingeschaltetem Editor, denn ohne ihn ließe sich die leere Datei nicht füllen.
+   */
+  async createEmpty(ctx: AuthContext, pageId: string, kind: NewOfficeKind, rawName: string): Promise<AttachmentDto> {
+    this.requireEnabled();
+    const name = rawName.trim().replace(new RegExp(`\\.${kind}$`, 'i'), '').trim() || 'Neu';
+    const file = emptyOfficeFile(kind, name);
+    return this.attachments.upload(pageId, `${name}.${kind}`, file.length, Readable.from(file), ctx);
+  }
+
   /** Schlüssel der Bearbeitung: alle, die das Dokument gleichzeitig öffnen, landen in derselben Sitzung */
   private async sessionKey(id: string, current: string | null): Promise<string> {
     if (current) return current;
@@ -123,6 +135,12 @@ export class OfficeService {
   async file(token: string): Promise<StreamableFile> {
     this.requireEnabled();
     const claims = verifyJwt(token, this.fileSecret);
+    // Leere Vorlage für die Prüfung (wikictl office-check)
+    const template = claims?.tpl;
+    if (typeof template === 'string' && (NEW_OFFICE_KINDS as readonly string[]).includes(template)) {
+      const data = emptyOfficeFile(template as NewOfficeKind, 'Prüfung');
+      return new StreamableFile(data, { type: 'application/octet-stream', length: data.length });
+    }
     const id = claims?.att;
     if (typeof id !== 'string' || !UUID.test(id)) throw Errors.notFound();
     const attachment = await this.prisma.attachment.findUnique({ where: { id } });
@@ -186,18 +204,28 @@ export class OfficeService {
   /**
    * Prüft die Verbindung zum Editor-Server von Ende zu Ende (wikictl office-check): der Editor-Server wandelt
    * eine Textdatei der API in ein DOCX um. Dabei muss er die API im internen Netz erreichen, das gemeinsame
-   * JWT-Geheimnis stimmen und die API das Ergebnis beim Editor-Server abholen können.
+   * JWT-Geheimnis stimmen und die API das Ergebnis beim Editor-Server abholen können. Danach wandelt er die
+   * leeren Vorlagen (Word, Excel, PowerPoint) in PDF um: so ist geprüft, dass der Editor sie öffnet.
    */
   async selfCheck(): Promise<string> {
     if (!this.config.OFFICE_ENABLED) throw new Error('Der Office-Editor ist nicht eingeschaltet (WIKI_OFFICE in .env).');
-    const request = {
-      async: false,
-      filetype: 'txt',
-      outputtype: 'docx',
-      key: randomUUID(),
-      title: 'wiki-check.txt',
-      url: `${this.config.OFFICE_API_URL.replace(/\/$/, '')}/api/v1/health`,
-    };
+    const api = this.config.OFFICE_API_URL.replace(/\/$/, '');
+    const docx = await this.convert('txt', 'docx', `${api}/api/v1/health`);
+    if (!matchesFormat(officeFormat('x.docx')!, docx)) throw new Error('Das Ergebnis der Umwandlung ist kein DOCX.');
+    // Die leeren Vorlagen für „Neues Dokument“ im Seiteneditor muss der Editor öffnen können
+    for (const kind of NEW_OFFICE_KINDS) {
+      const url = `${api}/api/v1/office/files/${signJwt({ tpl: kind }, this.fileSecret, FILE_TOKEN_SECONDS)}`;
+      const pdf = await this.convert(kind, 'pdf', url).catch((err: Error) => {
+        throw new Error(`Leere Vorlage ${kind}: ${err.message}`);
+      });
+      if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error(`Leere Vorlage ${kind} ließ sich nicht umwandeln.`);
+    }
+    return 'Office-Editor in Ordnung: erreichbar, JWT-Geheimnis stimmt, Datei-Abruf und Rückweg über das interne Netz funktionieren, leere Vorlagen lassen sich öffnen.';
+  }
+
+  /** Lässt den Editor-Server eine Datei umwandeln und holt das Ergebnis ab */
+  private async convert(filetype: string, outputtype: string, url: string): Promise<Buffer> {
+    const request = { async: false, filetype, outputtype, key: randomUUID(), title: `wiki-check.${filetype}`, url };
     const res = await fetch(new URL('/converter', this.config.OFFICE_INTERNAL_URL), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -214,9 +242,7 @@ export class OfficeService {
     if (!res.ok || !result.endConvert || !result.fileUrl) throw new Error(`Unerwartete Antwort des Editor-Servers (HTTP ${res.status}).`);
     const source = this.internalUrl(result.fileUrl);
     if (!source) throw new Error(`Der Editor-Server nennt eine unerwartete Adresse: ${result.fileUrl}`);
-    const file = Buffer.from(await (await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(60_000) })).arrayBuffer());
-    if (!matchesFormat(officeFormat('x.docx')!, file)) throw new Error('Das Ergebnis der Umwandlung ist kein DOCX.');
-    return 'Office-Editor in Ordnung: erreichbar, JWT-Geheimnis stimmt, Datei-Abruf und Rückweg über das interne Netz funktionieren.';
+    return Buffer.from(await (await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(60_000) })).arrayBuffer());
   }
 
   private verifyCallback(body: unknown, authorization: string | undefined): JwtClaims | null {

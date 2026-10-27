@@ -266,6 +266,10 @@ export interface OfficeEditorDto {
   attachment: AttachmentDto;
 }
 
+/** Leere Office-Dateien, die sich im Seiteneditor neu anlegen lassen (Word, Excel, PowerPoint) */
+export const NEW_OFFICE_KINDS = ['docx', 'xlsx', 'pptx'] as const;
+export type NewOfficeKind = (typeof NEW_OFFICE_KINDS)[number];
+
 /** Eingeschaltete optionale Dienste */
 export interface FeaturesDto {
   /** Office-Editor unter /office/ */

@@ -87,3 +87,53 @@ test('Office-Dokument ansehen, bearbeiten und als neue Fassung speichern', async
   const current = await page.request.get((await item.getByRole('link', { name: 'Urlaubsantrag.docx' }).getAttribute('href'))!);
   expect(Buffer.compare(await current.body(), SAVED)).toBe(0);
 });
+
+test('neue Excel-Tabelle aus dem Seiteneditor anlegen und im Office-Editor öffnen', async ({ page, context }) => {
+  await context.route('**/office/web-apps/apps/api/documents/api.js', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_API_JS }),
+  );
+  await acceptInviteAndSetup2fa(page, createAdminViaCli(`office-neu-${run}@example.de`));
+  await page.getByLabel('Schlüssel').fill(`${spaceKey.slice(0, 6)}N`);
+  await page.getByLabel('Name', { exact: true }).fill('Planung');
+  await page.getByRole('button', { name: 'Space anlegen' }).click();
+
+  // Neue Seite: erst nach dem Anlegen möglich, weil die Datei ein Anhang der Seite wird
+  await page.getByRole('link', { name: '+ Neue Seite' }).click();
+  await expect(page.getByRole('button', { name: 'Neue Office-Datei (erst nach dem Anlegen der Seite möglich)' })).toBeDisabled();
+  await page.getByLabel('Titel').fill('Budget');
+  await page.getByRole('button', { name: 'Seite anlegen' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+  const pageUrl = page.url();
+
+  await page.getByRole('link', { name: 'Bearbeiten' }).click();
+  await page.locator('.editor-content').click();
+  await page.getByRole('button', { name: 'Neue Word-, Excel- oder PowerPoint-Datei anlegen' }).click();
+  await page.getByLabel('Neu', { exact: true }).selectOption('xlsx');
+  await expect(page.getByLabel('Dateiname')).toHaveValue('Neue Tabelle');
+  await page.getByLabel('Dateiname').fill('Budget 2027');
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Anlegen und öffnen' }).click();
+
+  // Neuer Tab mit dem Office-Editor zum Bearbeiten; die Seite bleibt im Editor offen
+  const tab = await popup;
+  await expect(tab).toHaveURL(/\/attachments\/[^/]+\/office\?mode=edit$/);
+  const editor = tab.getByTestId('office-editor');
+  await expect(editor).toHaveText('Editor: Budget 2027.xlsx (edit)');
+  expect(JSON.parse((await editor.getAttribute('data-config'))!)).toMatchObject({ documentType: 'cell', document: { fileType: 'xlsx' } });
+  await tab.close();
+
+  // Link an der Cursorposition, nach dem Speichern auf der Seite und im Anhänge-Panel
+  await expect(page.locator('.editor-content a', { hasText: '📎 Budget 2027.xlsx' })).toBeVisible();
+  await page.getByRole('button', { name: 'Speichern' }).click();
+  await expect(page).toHaveURL(pageUrl);
+  const link = page.locator('.rich a', { hasText: '📎 Budget 2027.xlsx' });
+  await expect(link).toHaveAttribute('href', /^\/attachments\/[^/]+\/office$/);
+  const item = page.locator('.attachment-list li', { hasText: 'Budget 2027.xlsx' });
+  await expect(item.getByRole('link', { name: 'Bearbeiten' })).toBeVisible();
+  const file = await page.request.get(`${(await item.getByRole('link', { name: 'Budget 2027.xlsx' }).getAttribute('href'))!}?download=1`);
+  expect((await file.body()).subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+
+  // Link auf der Seite öffnet die Ansicht
+  await link.click();
+  await expect(page.getByTestId('office-editor')).toHaveText('Editor: Budget 2027.xlsx (view)');
+});
