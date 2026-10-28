@@ -77,10 +77,11 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 
 ## Office-Editor (optional)
 
-- **Euro-Office** zum Ansehen und gemeinsamen Bearbeiten von Word-, Excel- und PowerPoint-Anhängen (auch OpenDocument) direkt im Wiki, unter `/office/` auf derselben Domain. Der Installer fragt, ob er laufen soll.
+- **Euro-Office** (AGPL-3.0, europäischer Fork von ONLYOFFICE Docs) zum Ansehen und gemeinsamen Bearbeiten von Word-, Excel- und PowerPoint-Anhängen (DOCX, XLSX, PPTX und OpenDocument; DOC, XLS und PPT nur ansehen) direkt im Wiki, unter `/office/` auf derselben Domain.
 - **Neue Office-Dateien aus dem Seiteneditor:** „＋ Office-Datei“ in der Werkzeugleiste legt ein leeres Word-Dokument, eine Excel-Tabelle oder eine PowerPoint-Präsentation als Anhang der Seite an, setzt einen Link an die Cursorposition und öffnet die Datei in einem neuen Tab im Office-Editor. Ist der Office-Editor ausgeschaltet, fehlt der Knopf.
 - **Fassungen:** Jedes Speichern im Editor legt eine neue Fassung des Anhangs an; ältere Fassungen bleiben zum Herunterladen erhalten.
 - **Sicherheit:** signierte Konfiguration und Rückrufe (JWT, gemeinsames Geheimnis), kurzlebige Datei-Links, Editor-Server ohne Internetzugang, Download-Adressen aus Rückrufen nur vom eigenen Editor-Server (Schutz vor SSRF), Typprüfung am Inhalt. Details in [docs/betrieb.md](docs/betrieb.md#office-editor).
+- Braucht etwa 2 CPU-Kerne und 4 GB Arbeitsspeicher zusätzlich (Server mit 8 GB empfohlen). Der Installer fragt, ob er laufen soll; später `sudo wikictl office on|off`, Prüfung mit `sudo wikictl office-check`.
 
 ## Zeichnungen mit draw.io (optional)
 
