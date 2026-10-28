@@ -278,6 +278,11 @@ describe('Zeichnungen: neue Fassungen und feste Fassungen auf Seiten', () => {
     expect(readdirSync(join(dir, 'tmp'))).toEqual([]);
   });
 
+  it('neue Office-Dateien gibt es nur mit eingeschaltetem Office-Editor', async () => {
+    expect((await anna.client.post(`/pages/${pageId}/office-files`, { kind: 'docx', name: 'Notizen' })).status).toBe(404);
+    expect(await ctx.prisma.attachment.count()).toBe(0);
+  });
+
   it('meldet eingeschaltete Dienste', async () => {
     expect((await bernd.client.get('/features')).body).toEqual({ office: expect.any(Boolean), drawio: false });
   });

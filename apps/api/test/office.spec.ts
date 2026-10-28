@@ -1,8 +1,10 @@
+import { createHmac } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AttachmentDto, OfficeEditorDto } from '@wiki/shared';
 import request from 'supertest';
 import { signJwt, verifyJwt } from '../src/office/jwt';
+import { emptyOfficeFile } from '../src/office/templates';
 import { Account, createUser, ORIGIN, resetState, startApp, TestContext } from './helpers';
 import { createPage, createSpace, PNG } from './fixtures';
 
@@ -198,6 +200,48 @@ describe('Office-Editor', () => {
     expect((await callback({ ...claims, key: 'unbekannt' })).body).toEqual({ error: 1 });
     const row = await ctx.prisma.attachment.findUniqueOrThrow({ where: { id: a.id } });
     expect(row.version).toBe(1);
+  });
+
+  it('legt leere Word-, Excel- und PowerPoint-Dateien als Anhang an, die der Editor öffnet', async () => {
+    const created: AttachmentDto[] = [];
+    for (const [kind, name, filename] of [
+      ['docx', 'Protokoll', 'Protokoll.docx'],
+      ['xlsx', ' Budget 2027.XLSX ', 'Budget 2027.xlsx'],
+      ['pptx', 'Vortrag', 'Vortrag.pptx'],
+    ]) {
+      const res = await anna.client.post(`/pages/${pageId}/office-files`, { kind, name });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ filename, office: 'edit', version: 1, pageId });
+      created.push(res.body);
+    }
+    // Inhalt ist die Vorlage; der Editor bekommt eine gültige Konfiguration zum Bearbeiten
+    const file = await anna.client.get(`/attachments/${created[0].id}?download=1`).buffer(true);
+    expect(Buffer.compare(file.body as Buffer, emptyOfficeFile('docx', 'Protokoll'))).toBe(0);
+    for (const [i, documentType] of ['word', 'cell', 'slide'].entries()) {
+      const res = await editorConfig(anna, created[i].id, 'edit');
+      expect(res.status).toBe(200);
+      expect(res.body.config).toMatchObject({ documentType, document: { permissions: { edit: true } } });
+    }
+    const list = (await anna.client.get(`/pages/${pageId}/attachments`)).body as AttachmentDto[];
+    expect(list.map((a) => a.filename)).toEqual(['Protokoll.docx', 'Budget 2027.xlsx', 'Vortrag.pptx']);
+  });
+
+  it('neue Dateien nur mit Bearbeiten-Recht und nur in den vorgesehenen Formaten', async () => {
+    expect((await bernd.client.post(`/pages/${pageId}/office-files`, { kind: 'docx', name: 'X' })).status).toBe(403);
+    expect((await anna.client.post(`/pages/${pageId}/office-files`, { kind: 'doc', name: 'X' })).status).toBe(400);
+    expect((await anna.client.post(`/pages/${pageId}/office-files`, { kind: 'docx', name: '' })).status).toBe(400);
+    expect((await anna.client.post(`/pages/${pageId}/office-files`, { kind: 'docx', name: 'x'.repeat(201) })).status).toBe(400);
+    expect(await ctx.prisma.attachment.count()).toBe(0);
+  });
+
+  it('liefert dem Editor-Server die leeren Vorlagen für office-check nur mit gültigem Link', async () => {
+    const fileSecret = createHmac('sha256', process.env.SESSION_SECRET!).update('office-file').digest('hex');
+    const anonymous = request(ctx.app.getHttpServer());
+    const res = await anonymous.get(`/api/v1/office/files/${signJwt({ tpl: 'pptx' }, fileSecret, 60)}`).buffer(true);
+    expect(res.status).toBe(200);
+    expect(Buffer.compare(res.body as Buffer, emptyOfficeFile('pptx', 'Prüfung'))).toBe(0);
+    expect((await anonymous.get(`/api/v1/office/files/${signJwt({ tpl: 'exe' }, fileSecret, 60)}`)).status).toBe(404);
+    expect((await anonymous.get(`/api/v1/office/files/${signJwt({ tpl: 'pptx' }, SECRET, 60)}`)).status).toBe(404);
   });
 
   it('Löschen entfernt alle Fassungen', async () => {

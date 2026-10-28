@@ -78,7 +78,17 @@ function OfficeEditor() {
           <span className="muted">Office-Editor wird geladen …</span>
         )}
       </div>
-      {editor.error && <Alert>{errorMessage(editor.error)}</Alert>}
+      {editor.error && (
+        <>
+          <Alert>{errorMessage(editor.error)}</Alert>
+          {/* z. B. Office-Editor abgeschaltet: die Datei bleibt erreichbar */}
+          <p>
+            <a className="button small secondary" href={`/api/v1/attachments/${id}?download=1`}>
+              Datei herunterladen
+            </a>
+          </p>
+        </>
+      )}
       <Alert>{error}</Alert>
       <div className="office-frame">
         <div id="office-editor" data-testid="office-editor" />
