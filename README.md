@@ -1,9 +1,9 @@
 # wikifordummys
 
 Selbst gehostetes, Confluence-ähnliches Wiki mit integrierter Benutzerverwaltung für Ubuntu.
-Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, pflegt es gemeinsam und findet es über die Volltextsuche.
+Ein kleines Team (10 bis 20 Personen) legt Wissen in Spaces als Seitenbaum an, pflegt es gemeinsam und findet es über die Volltextsuche. Optional dazu: Office-Dokumente im Browser bearbeiten (Euro-Office), Zeichnungen mit draw.io und ein MCP-Server, über den Claude im Wiki liest und schreibt.
 
-**Stand: Meilenstein 4 (Go-live).** Benutzer, Gruppen, Einladungen, Login mit Pflicht-2FA, Sitzungen, Admin-Oberfläche und Audit-Log (M1), Spaces, Seitenbaum, Editor und Versionen (M2), Rollen je Space, Seiteneinschränkungen, Anhänge und Volltextsuche (M3) sowie Installer, Sicherung, Überwachung und Betriebswerkzeuge (M4) sind fertig. Nach dem Pilotbetrieb folgt Meilenstein 5 (Zusammenarbeit).
+**Stand:** Meilensteine 1 bis 4 sind fertig (Benutzerverwaltung, Spaces und Editor, Rechte, Anhänge und Suche, Installer und Betrieb), dazu Office-Editor, draw.io und der MCP-Server. Offen ist der Pilotbetrieb nach [docs/go-live.md](docs/go-live.md); danach folgt Meilenstein 5 (Zusammenarbeit).
 
 **Installation in Kürze** (Ubuntu 22.04/24.04, VPS oder eigener Server):
 
@@ -12,78 +12,114 @@ sudo git clone https://github.com/fabianbosch123/wikifordummys.git /opt/wikiford
 cd /opt/wikifordummys && sudo ./install.sh
 ```
 
-Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator und Sicherungsziel ab. Details: [docs/installation.md](docs/installation.md), Betrieb: [docs/betrieb.md](docs/betrieb.md), Abnahme: [docs/go-live.md](docs/go-live.md).
+Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Sicherungsziel und die optionalen Dienste ab.
+
+## Dokumentation
+
+| Dokument | Inhalt |
+| --- | --- |
+| [docs/installation.md](docs/installation.md) | Voraussetzungen, Ablauf des Installers, Betriebsarten mit Proxy-Beispielen, Mail-Anbieter, Installation ohne Rückfragen oder von Hand |
+| [docs/betrieb.md](docs/betrieb.md) | `wikictl`, Office-Editor, draw.io, Updates, Sicherung und Wiederherstellung, Überwachung, fail2ban, Platte voll |
+| [docs/mcp.md](docs/mcp.md) | MCP-Server einrichten (claude.ai, Claude Code, Claude Desktop), Werkzeuge, Fehlersuche |
+| [docs/go-live.md](docs/go-live.md) | Abnahme-Checkliste und Pilotbetrieb |
 
 ## Inhalt
 
-- [Funktionen in Meilenstein 1](#funktionen-in-meilenstein-1)
-- [Funktionen in Meilenstein 2](#funktionen-in-meilenstein-2)
-- [Funktionen in Meilenstein 3](#funktionen-in-meilenstein-3)
-- [Funktionen in Meilenstein 4](#funktionen-in-meilenstein-4)
+- [Benutzer und Anmeldung](#benutzer-und-anmeldung)
+- [Spaces, Seiten und Editor](#spaces-seiten-und-editor)
+- [Rechte und Suche](#rechte-und-suche)
+- [Anhänge](#anhänge)
+- [Office-Editor (optional)](#office-editor-optional)
+- [Zeichnungen mit draw.io (optional)](#zeichnungen-mit-drawio-optional)
+- [Claude und KI-Assistenten (MCP)](#claude-und-ki-assistenten-mcp)
+- [Installation und Betrieb](#installation-und-betrieb)
 - [Aufbau](#aufbau)
-- [Betrieb](#betrieb)
 - [Lokale Entwicklung](#lokale-entwicklung)
 - [Tests](#tests)
-- [Sicherheit](#sicherheit)
+- [Sicherheitskonzept](#sicherheitskonzept)
 - [API](#api)
 - [Nächste Meilensteine](#nächste-meilensteine)
 
-## Funktionen in Meilenstein 1
+## Benutzer und Anmeldung
 
-- **Konten nur per Einladung.** Keine offene Registrierung. Der Einladungslink ist 72 Stunden gültig. Der erste Administrator bekommt stattdessen ein Startpasswort in der Shell, damit die Anmeldung auch ohne Mailversand klappt; es muss nach der ersten Anmeldung geändert werden.
-- **Erster Administrator per Kommandozeile**, ohne Standard-Passwort.
+- **Konten nur per Einladung.** Keine offene Registrierung; der Einladungslink ist 72 Stunden gültig. Ohne Mailserver zeigt die Administration den Link an.
+- **Erster Administrator per Kommandozeile** (`wikictl create-admin`), ohne Standard-Passwort: Die Shell zeigt ein Startpasswort, das nach der ersten Anmeldung geändert werden muss. Mit `--invite` kommt stattdessen ein Einladungslink per Mail. `wikictl reset-password` setzt ein Passwort ohne Mailversand zurück.
 - **Pflicht-2FA für alle (TOTP).** Vor der Einrichtung gibt es keinen Zugriff auf Inhalte. Dazu 10 Wiederherstellungscodes, jeder einmal nutzbar.
 - **Passwort vergessen** per Mail-Link (60 Minuten gültig). Die 2FA bleibt dabei bestehen.
-- **Profil:** Anzeigename, Passwort ändern, angemeldete Geräte ansehen und abmelden, neue Wiederherstellungscodes.
-- **Administration:** Benutzer einladen, deaktivieren, reaktivieren, Adminrechte vergeben, 2FA zurücksetzen, Sitzungen beenden; Gruppen anlegen und Mitglieder pflegen; Audit-Log mit Filter.
+- **Profil:** Anzeigename, Passwort ändern, angemeldete Geräte ansehen und abmelden, neue Wiederherstellungscodes, API-Tokens für den MCP-Server.
+- **Administration:** Benutzer einladen, deaktivieren, reaktivieren, Adminrechte vergeben, 2FA zurücksetzen, Sitzungen beenden; Gruppen anlegen und Mitglieder pflegen; Mailversand einrichten; MCP-Server ein- und ausschalten; Audit-Log mit Filter.
 - Systemgruppen `alle-benutzer` (jedes aktive Konto automatisch) und `administratoren`. Konten werden deaktiviert statt gelöscht.
 
-## Funktionen in Meilenstein 2
+## Spaces, Seiten und Editor
 
-- **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite; archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus.
-- **Seitenbaum** beliebig tief, mit Brotkrumen; Seiten per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
-- **Editor (TipTap):** Überschriften, Fett/Kursiv/Durchgestrichen/Code, Listen, Zitate, Code-Blöcke, Tabellen, Bilder (per https-Adresse, ab M3 auch hochgeladen), Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Gespeichert wird JSON, kein HTML.
+- **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite. Archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus. Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`).
+- **Seitenbaum** beliebig tief, mit Brotkrumen, in einer Seitenleiste links (etwa 20 % der Breite); der Inhalt nutzt die volle restliche Breite. Seiten lassen sich per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
+- **Editor (TipTap):** Überschriften, Fett, Kursiv, Unterstrichen, Durchgestrichen, Code, Listen, Zitate, Code-Blöcke, Trennlinien, Tabellen, Bilder, Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Bilder lassen sich an den Ecken, Tabellenspalten am Spaltenrand in der Größe ziehen. Gespeichert wird JSON, kein HTML.
+- **Drag & Drop und Zwischenablage:** Bilder und Dateien lassen sich in den Text ziehen oder einfügen. Bilder erscheinen als Bild, andere Dateien als Link auf den Anhang; bei neuen Seiten wird beim Anlegen hochgeladen.
 - **Versionen:** Jede Speicherung ist eine unveränderliche Version. Verlauf mit zeilenweisem Vergleich zweier Versionen; alte Versionen lassen sich ansehen und als neue Version wiederherstellen.
 - **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.
 - **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt.
-- Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`).
 
-## Funktionen in Meilenstein 3
+## Rechte und Suche
 
-- **Rollen je Space** für Gruppen und einzelne Personen: *Leser* sehen die Seiten, *Bearbeiter* legen Seiten an, ändern und verschieben sie und laden Anhänge hoch, *Space-Admins* verwalten zusätzlich Einstellungen, Rollen und den Papierkorb. Es gilt die höchste Rolle aus Person und Gruppen; die Gruppe `alle-benutzer` umfasst jedes aktive Konto. Wer keine Rolle hat, sieht den Space nicht (404). Systemadministratoren sind in jedem Space Admin. Gepflegt wird das unter **Space-Einstellungen → Rollen**.
-- **Neue Spaces** sind standardmäßig offen (Ersteller Space-Admin, `alle-benutzer` Bearbeiter); beim Anlegen lässt sich das abwählen, dann sieht ihn zunächst nur der Ersteller. Bestehende Spaces aus Meilenstein 2 werden bei der Migration genau so eingerichtet, es ändert sich also nichts.
+- **Rollen je Space** für Gruppen und einzelne Personen: *Leser* sehen die Seiten, *Bearbeiter* legen Seiten an, ändern und verschieben sie und laden Anhänge hoch, *Space-Admins* verwalten zusätzlich Einstellungen, Rollen und den Papierkorb. Es gilt die höchste Rolle aus Person und Gruppen. Wer keine Rolle hat, sieht den Space nicht (404). Systemadministratoren sind in jedem Space Admin. Gepflegt wird das unter **Space-Einstellungen → Rollen**.
+- **Neue Spaces** sind standardmäßig offen (Ersteller Space-Admin, `alle-benutzer` Bearbeiter); beim Anlegen lässt sich das abwählen, dann sieht ihn zunächst nur der Ersteller.
 - **Seiteneinschränkungen** „Ansehen“ und „Bearbeiten“ auf Gruppen oder Personen, Schaltfläche **Einschränkungen** auf der Seite. Sie gelten für die Seite und alle Unterseiten und verengen nur: jede Einschränkung entlang des Pfads muss erfüllt sein. Eingeschränkte Seiten verschwinden für andere aus Baum, Suche und Anhängen (404). Space-Admins sind nicht eingeschränkt, damit keine Seite unerreichbar wird; Bearbeiter können sich nicht selbst aussperren.
-- **Anhänge** je Seite (bis 50 MB, einstellbar über `ATTACHMENT_MAX_MB`): Bilder mit Vorschau, PDF öffnet im Browser, alles andere wird heruntergeladen. Im Editor lassen sich Bilder direkt hochladen und einbinden; Bilder und Dateien lassen sich auch in den Text ziehen oder aus der Zwischenablage einfügen (Bilder erscheinen als Bild, andere Dateien als Link, bei neuen Seiten wird beim Anlegen hochgeladen). Anhänge liegen im Volume `attachments` unter zufälligem Namen.
-- **Volltextsuche** über Titel und Inhalt mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben, Filter nach Space; immer nur über Seiten, die man sehen darf. Suchfeld oben in der Kopfzeile.
+- **Volltextsuche** über Titel, Inhalt und Beschriftungen von Zeichnungen mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben, Filter nach Space; immer nur über Seiten, die man sehen darf. Suchfeld oben in der Kopfzeile.
 
-## Funktionen in Meilenstein 4
+## Anhänge
 
-- **Installer `install.sh`** für Ubuntu: fragt Domain, Betriebsart, SMTP-Zugang, ersten Administrator, Sicherungsziel und Überwachung ab, erzeugt `.env` mit zufälligen Schlüsseln, installiert bei Bedarf Docker, baut und startet das Wiki, prüft API, Zertifikat und Mailversand (mit Testmail) und zeigt die Zugangsdaten des ersten Administrators (Startpasswort) an. Erneut aufgerufen ändert er die Konfiguration, ohne Schlüssel zu ersetzen; mit `--non-interactive` läuft er ohne Rückfragen.
-- **Drei Betriebsarten** für VPS und eigenen Server: öffentlich mit Let's Encrypt, nur im eigenen Netz mit eigener Zertifizierungsstelle, oder hinter einem vorhandenen Reverse Proxy (nginx, Apache, Traefik), der HTTPS übernimmt. Echte Client-IPs bleiben dabei erhalten.
-- **Mailversand in der Administration** (**Administration → E-Mail**): SMTP-Server, Verschlüsselung, Zugang und Absender ändern, Verbindung vor dem Speichern prüfen, Testmail senden. Hat Vorrang vor `.env`; das Passwort liegt verschlüsselt in der Datenbank. Änderungen und Testmails stehen im Audit-Log.
-- **`wikictl`** für den Betrieb: Status, Logs, Update mit vorheriger Sicherung, Sicherung, Wiederherstellung (auch auf einem neuen Server), Test-Wiederherstellung, Mailtest, Stammzertifikat ausgeben.
-- **Sicherung mit restic** (Datenbank, Anhänge, Zertifikate, `.env`; verschlüsselt, 7/4/6 Stände) an ein lokales Verzeichnis, per SFTP, auf S3 oder einen REST-Server, nächtlich per systemd-Timer; monatlich automatische **Test-Wiederherstellung** in einen Wegwerf-Container mit Prüfsummenkontrolle aller Anhänge.
-- **Überwachung**: Healthchecks für API und Weboberfläche, Push an Uptime Kuma oder healthchecks.io alle 5 Minuten und nach jeder Sicherung.
-- **Härtung**: optional ufw, automatische Sicherheitsupdates und fail2ban (sperrt IPs nach wiederholten Fehlanmeldungen in der Docker-Kette).
-- **CI**: Probeinstallation mit dem Installer in den Betriebsarten `internal` und `proxy`, danach Sicherung, Test-Wiederherstellung und Wiederherstellung, plus OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
+- **Anhänge je Seite** bis 50 MB (einstellbar über `ATTACHMENT_MAX_MB`): Bilder mit Vorschau, PDF öffnet im Browser, Office-Dateien im Office-Editor (falls eingeschaltet), alles andere wird heruntergeladen.
+- **Panel rechts** neben dem Seiteninhalt mit der Kopfzeile „Anhänge (n)“ zum Auf- und Zuklappen. Zugeklappt bekommt der Inhalt die volle Breite; der Zustand wird je Browser gemerkt. Auf schmalen Bildschirmen (unter 1000 px) steht das Panel unter dem Inhalt.
+- **Fassungen:** Office-Editor und draw.io legen beim Speichern eine neue Fassung des Anhangs an; ältere Fassungen bleiben herunterladbar.
+- **Schutz vor voller Platte:** Uploads werden abgelehnt, wenn danach weniger als 2 GB frei wären; dazu ein Tageskontingent und eine stündliche Höchstzahl je Benutzer (`ATTACHMENT_MIN_FREE_MB`, `ATTACHMENT_QUOTA_MB_PER_DAY`, `RATE_UPLOADS_PER_HOUR` in `.env`).
+- Anhänge liegen im Volume `attachments` unter zufälligem Namen und sind Teil der Sicherung.
 
 ## Office-Editor (optional)
 
-- **Euro-Office** zum Ansehen und gemeinsamen Bearbeiten von Word-, Excel- und PowerPoint-Anhängen (auch OpenDocument) direkt im Wiki, unter `/office/` auf derselben Domain. Der Installer fragt, ob er laufen soll.
+- **Euro-Office** (AGPL-3.0, europäischer Fork von ONLYOFFICE Docs) zum Ansehen und gemeinsamen Bearbeiten von Word-, Excel- und PowerPoint-Anhängen (DOCX, XLSX, PPTX und OpenDocument; DOC, XLS und PPT nur ansehen) direkt im Wiki, unter `/office/` auf derselben Domain.
 - **Neue Office-Dateien aus dem Seiteneditor:** „＋ Office-Datei“ in der Werkzeugleiste legt ein leeres Word-Dokument, eine Excel-Tabelle oder eine PowerPoint-Präsentation als Anhang der Seite an, setzt einen Link an die Cursorposition und öffnet die Datei in einem neuen Tab im Office-Editor. Ist der Office-Editor ausgeschaltet, fehlt der Knopf.
 - **Fassungen:** Jedes Speichern im Editor legt eine neue Fassung des Anhangs an; ältere Fassungen bleiben zum Herunterladen erhalten.
 - **Sicherheit:** signierte Konfiguration und Rückrufe (JWT, gemeinsames Geheimnis), kurzlebige Datei-Links, Editor-Server ohne Internetzugang, Download-Adressen aus Rückrufen nur vom eigenen Editor-Server (Schutz vor SSRF), Typprüfung am Inhalt. Details in [docs/betrieb.md](docs/betrieb.md#office-editor).
+- Braucht etwa 2 CPU-Kerne und 4 GB Arbeitsspeicher zusätzlich (Server mit 8 GB empfohlen). Der Installer fragt, ob er laufen soll; später `sudo wikictl office on|off`, Prüfung mit `sudo wikictl office-check`.
 
 ## Zeichnungen mit draw.io (optional)
 
-- **draw.io** (diagrams.net, Apache-2.0) im Seiteneditor: Knopf **◇ Zeichnung** fügt eine Zeichnung ein, z. B. einen Netzwerkplan (Formen für Netzwerk, Rack und Cisco sind gleich in der Seitenleiste). **✎ Zeichnung bearbeiten** oder Doppelklick öffnet sie wieder. Läuft selbst gehostet unter `/draw/`, ohne externe Dienste. Der Installer fragt, ob es laufen soll.
-- **Speicherung:** als PNG-Anhang der Seite mit eingebetteten draw.io-Daten (lässt sich auch in draw.io Desktop öffnen). Jedes Speichern legt eine neue Fassung des Anhangs an; die Seite verweist auf genau die Fassung, die beim Speichern der Seite aktuell war, damit ältere Seitenversionen die damalige Zeichnung zeigen. Beschriftungen der Zeichnung sind über die Suche auffindbar.
-- **Sicherheit:** draw.io läuft abgeschottet im Rahmen (eigener, leerer Ursprung ohne Zugriff auf Cookies und API), der Austausch läuft nur über postMessage; Rechte wie bei Seiten (Leser sehen, Bearbeiter bearbeiten). Details in [docs/betrieb.md](docs/betrieb.md#zeichnungen-mit-drawio).
+- **draw.io** (diagrams.net, Apache-2.0) im Seiteneditor: Knopf **◇ Zeichnung** fügt eine Zeichnung ein, z. B. einen Netzwerkplan (Formen für Netzwerk, Rack und Cisco sind gleich in der Seitenleiste). **✎ Zeichnung bearbeiten** oder Doppelklick öffnet sie wieder. Läuft selbst gehostet unter `/draw/`, ohne externe Dienste und abgeschottet in einem eigenen Rahmen.
+- **Speicherung:** als PNG-Anhang der Seite mit eingebetteten draw.io-Daten (lässt sich auch in draw.io Desktop öffnen). Die Seite verweist auf genau die Fassung, die beim Speichern der Seite aktuell war, damit ältere Seitenversionen die damalige Zeichnung zeigen. Beschriftungen sind über die Suche auffindbar.
+- Klein (etwa 150 MB Platz, kaum Arbeitsspeicher) und standardmäßig an. Der Installer fragt, ob es laufen soll; später `sudo wikictl drawio on|off`. Abgeschaltet bleiben vorhandene Zeichnungen als Bild sichtbar. Details in [docs/betrieb.md](docs/betrieb.md#zeichnungen-mit-drawio).
 
 ## Claude und KI-Assistenten (MCP)
 
-- **MCP-Server** unter `/api/v1/mcp`: Claude (claude.ai mit App und Projekten, Claude Code, Claude Desktop) liest und durchsucht das Wiki, legt Seiten aus Markdown an, ändert sie und erstellt draw.io-Zeichnungen aus XML. Standardmäßig aus; ein Administrator schaltet ihn unter Administration → Claude (MCP) ein.
-- **API-Tokens** legt jeder Benutzer im Profil an (mit 2FA-Code, höchstens ein Jahr gültig, nur lesen oder lesen und schreiben). In claude.ai wird das Wiki als eigener Connector eingetragen; die Anmeldung läuft dann per OAuth über eine Zustimmungsseite im Wiki (mit 2FA-Code), ganz ohne Token. Ein Token oder eine Verbindung hat genau die Rechte seines Benutzers; jede Änderung steht im Audit-Log. Einrichtung, Werkzeuge und Sicherheitskonzept: [docs/mcp.md](docs/mcp.md).
+- **MCP-Server** unter `/api/v1/mcp`: Claude (claude.ai mit App und Projekten, Claude Code, Claude Desktop) liest und durchsucht das Wiki, legt Seiten aus Markdown an, ändert oder ergänzt sie und erstellt oder ersetzt draw.io-Zeichnungen aus XML. Löschen, Verschieben, Rechte und Administration gibt es über MCP bewusst nicht. Standardmäßig aus; ein Administrator schaltet ihn unter **Administration → Claude (MCP)** ein.
+- **API-Tokens** für Claude Code und Claude Desktop legt jeder Benutzer im Profil an (mit 2FA-Code, höchstens ein Jahr gültig, standardmäßig nur lesen, wahlweise lesen und schreiben).
+- **Connector in claude.ai:** Das Wiki wird als eigener Connector eingetragen; die Anmeldung läuft per OAuth über eine Zustimmungsseite im Wiki (mit 2FA-Code), ganz ohne Token. Voraussetzung ist ein öffentlich erreichbares Wiki mit gültigem Zertifikat.
+- Ein Token oder eine Verbindung hat genau die Rechte seines Benutzers; jede Änderung steht im Audit-Log. Einrichtung und Werkzeuge: [docs/mcp.md](docs/mcp.md).
+
+## Installation und Betrieb
+
+- **Installer `install.sh`** für Ubuntu: fragt Domain, Betriebsart, SMTP-Zugang, ersten Administrator, Sicherungsziel, Überwachung, Office-Editor und draw.io ab, erzeugt `.env` mit zufälligen Schlüsseln, installiert bei Bedarf Docker, baut und startet das Wiki, prüft API, Zertifikat, draw.io und Mailversand (mit Testmail) und zeigt das Startpasswort des ersten Administrators an. Erneut aufgerufen ändert er die Konfiguration, ohne Schlüssel zu ersetzen; mit `--non-interactive` läuft er ohne Rückfragen.
+- **Drei Betriebsarten** für VPS und eigenen Server: öffentlich mit Let's Encrypt, nur im eigenen Netz mit eigener Zertifizierungsstelle, oder hinter einem vorhandenen Reverse Proxy (nginx, Apache, Traefik), der HTTPS übernimmt. Echte Client-IPs bleiben dabei erhalten, auch über IPv6.
+- **Mailversand in der Administration** (**Administration → E-Mail**): SMTP-Server, Verschlüsselung, Zugang und Absender ändern, Verbindung vor dem Speichern prüfen, Testmail senden. Hat Vorrang vor `.env`; das Passwort liegt verschlüsselt in der Datenbank.
+- **`wikictl`** für den Betrieb (Übersicht mit `sudo wikictl help`):
+
+  | Befehl | Zweck |
+  | --- | --- |
+  | `status`, `logs [dienst]` | Zustand und Logs |
+  | `update [git-ref]` | Update mit vorheriger Sicherung und Platzprüfung, fragt neue optionale Dienste einmal ab, räumt danach alte Images und Build-Cache auf |
+  | `cleanup` | Platz schaffen (Build-Cache, unbenutzte Images, Journal); Volumes und Sicherungen bleiben |
+  | `backup`, `snapshots`, `restore <id\|latest>`, `restore-test` | Sicherung, Stände, Wiederherstellung (auch auf einem neuen Server), Test-Wiederherstellung |
+  | `office on\|off`, `office-check`, `drawio on\|off` | Optionale Dienste |
+  | `create-admin`, `reset-password`, `mail-test` | Konten und Mailversand |
+  | `reconfigure`, `monitor`, `ca-cert` | Installer erneut, Health-Check mit Push, Stammzertifikat (Betriebsart `internal`) |
+
+- **Sicherung mit restic** (Datenbank, Anhänge, Zertifikate, `.env`; verschlüsselt, 7/4/6 Stände) an ein lokales Verzeichnis, per SFTP, auf S3 oder einen REST-Server, nächtlich per systemd-Timer; monatlich automatische **Test-Wiederherstellung** in einen Wegwerf-Container mit Prüfsummenkontrolle aller Anhänge.
+- **Überwachung:** Healthchecks für API und Weboberfläche, Push an Uptime Kuma oder healthchecks.io alle 5 Minuten und nach jeder Sicherung; knapper Speicherplatz wird früh gemeldet.
+- **Härtung:** optional ufw, automatische Sicherheitsupdates und fail2ban.
+
+Für 10 bis 20 Benutzer reicht ein Server oder VPS mit 2 vCPU, 4 GB RAM und 40 GB SSD (Richtwert, nicht gemessen); mit Office-Editor 8 GB RAM.
+
+`ENCRYPTION_KEY` in `.env` verschlüsselt die 2FA-Geheimnisse und das SMTP-Passwort aus der Administration. Er wird nie automatisch ersetzt und ist Teil der Sicherung; zusätzlich gehört das Passwort der Sicherung (`BACKUP_PASSWORD`) an einen Ort außerhalb des Servers.
 
 ## Aufbau
 
@@ -94,14 +130,14 @@ apps/
 packages/
   shared/     Gemeinsame Typen und Passwortregeln
 e2e/          Ende-zu-Ende-Tests mit Playwright
-deploy/       caddy/ (Betriebsarten), wikictl, systemd-Timer, fail2ban
-docs/         Installation, Betrieb, Go-live-Checkliste
+deploy/       caddy/ (Betriebsarten), drawio/, wikictl, systemd-Timer, fail2ban
+docs/         Installation, Betrieb, MCP, Go-live-Checkliste
 install.sh    Installer für Ubuntu
-docker-compose.yml       Betrieb (Caddy, Web, API, PostgreSQL, Redis)
+docker-compose.yml       Betrieb (Caddy, Web, API, PostgreSQL, Redis; optional Office, draw.io)
 docker-compose.dev.yml   Entwicklung (PostgreSQL, Redis, Mailpit)
 ```
 
-Jede Anfrage läuft über Caddy: `/api/*` geht an die API, alles andere an die Weboberfläche. PostgreSQL und Redis hängen in einem internen Docker-Netz ohne Zugang nach außen; nur Caddy ist mit den Ports 80 und 443 erreichbar.
+Jede Anfrage läuft über Caddy: `/api/*` geht an die API, `/office/` an den Office-Editor, `/draw/` an draw.io, alles andere an die Weboberfläche. PostgreSQL, Redis, Office-Editor und draw.io hängen in internen Docker-Netzen ohne Zugang nach außen; nur Caddy ist mit den Ports 80 und 443 erreichbar.
 
 | Schicht | Wahl |
 | --- | --- |
@@ -113,16 +149,6 @@ Jede Anfrage läuft über Caddy: `/api/*` geht an die API, alles andere an die W
 | Anmeldung | argon2 (Argon2id), otplib (TOTP), helmet |
 | Reverse Proxy | Caddy 2 mit automatischem Let’s-Encrypt-Zertifikat |
 | Tests | Vitest (Unit und Integration), Playwright (Ende-zu-Ende) |
-
-## Betrieb
-
-Für 10 bis 20 Benutzer reicht ein Server oder VPS mit 2 vCPU, 4 GB RAM und 40 GB SSD (Richtwert, nicht gemessen).
-
-- **Installation:** `sudo ./install.sh`, siehe [docs/installation.md](docs/installation.md) (Betriebsarten, Proxy-Beispiele, Mail-Anbieter, Installation ohne Rückfragen, Installation von Hand).
-- **Betrieb:** `sudo wikictl status | update | backup | restore | restore-test | logs`, siehe [docs/betrieb.md](docs/betrieb.md) (Updates, Sicherung, Wiederherstellung auf neuem Server, Überwachung, fail2ban).
-- **Abnahme und Pilot:** [docs/go-live.md](docs/go-live.md).
-
-`ENCRYPTION_KEY` in `.env` verschlüsselt die 2FA-Geheimnisse und das SMTP-Passwort aus der Administration. Er wird nie automatisch ersetzt und ist Teil der Sicherung; zusätzlich gehört das Passwort der Sicherung (`BACKUP_PASSWORD`) an einen Ort außerhalb des Servers.
 
 ## Lokale Entwicklung
 
@@ -164,29 +190,19 @@ Die API-Tests nutzen die Datenbank `wiki_test` und Redis-DB 15, die Ende-zu-Ende
 
 Die CI (`.github/workflows/ci.yml`) führt bei jedem Push Linter, Typprüfung, alle Tests, `pnpm audit`, einen Secret-Scan (Gitleaks) und einen Container-Scan (Trivy) aus. Dazu kommt eine Probeinstallation mit `install.sh --non-interactive` in den Betriebsarten `internal` und `proxy` mit Sicherung, Test-Wiederherstellung und Wiederherstellung sowie ein OWASP-ZAP-Baseline-Scan (Bericht als Artefakt `zap-report`). Die Shell-Skripte prüft `shellcheck -x install.sh deploy/wikictl deploy/lib.sh`.
 
-## Sicherheit
+## Sicherheitskonzept
 
-Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien. Umgesetzt und getestet sind:
+Die Anforderungen S1 bis S14 aus dem Architekturkonzept sind Abnahmekriterien; welche Tests sie jeweils nachweisen, steht in [docs/go-live.md](docs/go-live.md#5-sicherheitsanforderungen-s1-bis-s14). Kurz gefasst:
 
-| Nr. | Anforderung | Umsetzung | Nachweis |
-| --- | --- | --- | --- |
-| S1 | Passwort-Hashing | Argon2id (64 MiB, t=3), 12 bis 256 Zeichen, nie im Log | `password.service.spec.ts`, `auth.spec.ts` |
-| S2 | 2FA für alle | TOTP Pflicht vor jedem Zugriff; Geheimnis AES-256-GCM-verschlüsselt; 10 gehashte Wiederherstellungscodes, je einmal nutzbar; jeder TOTP-Code nur einmal gültig | `auth.spec.ts`, `onboarding.spec.ts` (E2E) |
-| S3 | Rate-Limiting | Login und 2FA: 5 pro Minute je IP und je Konto, danach steigende Sperre (1 min, 2 min, … bis 1 h); Passwort-Reset: 3 pro Stunde; API: 300 pro Minute je Benutzer; MCP: 120 Aufrufe pro Minute und 120 Änderungen pro Stunde je Token, steigende Sperre nach falschen Tokens | `auth.spec.ts` (429 mit `Retry-After`) |
-| S4 | Sitzungen | Serverseitig in Redis (nur Hash der Session-ID); Cookie `__Host-session`, HttpOnly, Secure, SameSite=Lax; neue Session-ID nach Passwort und nach 2FA; 12 h Leerlauf, 14 Tage absolut; Passwortänderung beendet alle anderen Sitzungen | `auth.spec.ts` |
-| S5 | CSRF | SameSite-Cookie plus Double-Submit-Token (`__Host-csrf` / Header `X-CSRF-Token`) bei allen ändernden Anfragen; Origin- und Referer-Prüfung | `auth.spec.ts` |
-| S6 | XSS | Seiten als TipTap-JSON; die API lässt nur erlaubte Knoten, Marks und Attribute zu und prüft Link- und Bild-Adressen (kein `javascript:`, `data:` usw.); die Weboberfläche rendert nur diese Knoten als React-Elemente, ohne `dangerouslySetInnerHTML` (Linter-Regel); eingefügtes HTML wird mit DOMPurify bereinigt; Content-Security-Policy mit Nonce je Anfrage (`script-src 'self' 'nonce-…' 'strict-dynamic'`) | `content.spec.ts`, `pages.spec.ts` (API und E2E) |
-| S7 | Uploads | Höchstgröße (Standard 50 MiB) in Caddy und API, Abbruch beim Streamen ohne Reste; Typ wird am Inhalt erkannt (PNG, JPEG, GIF, WebP, PDF), alles andere inklusive HTML und SVG ist `application/octet-stream` mit `Content-Disposition: attachment`; Ablage außerhalb des Web-Roots unter zufälligem Namen; Auslieferung nur mit Rechteprüfung, `nosniff` und `default-src 'none'` | `attachments.spec.ts` (HTML/SVG-Upload, Größe, Dateinamen), `m3.spec.ts` (E2E) |
-| S8 | Autorisierung | Zentraler Guard („verweigern“ als Standard) plus `PermissionService` als einzige Stelle für Space-Rollen und Seiteneinschränkungen; ohne Rolle oder bei Ansehen-Einschränkung 404; Baum, Space-Liste, Suche und Anhänge nutzen dieselbe Prüfung | `rights.spec.ts`: jede Route mit jeder Rolle (keine, Leser, Bearbeiter, Admin) und mit Einschränkung; `pages.spec.ts`: ohne Anmeldung, ohne 2FA |
-| S9 | Eingaben | Alle DTOs validiert, unbekannte Felder abgelehnt, Inhalte zusätzlich per Whitelist geprüft; nur parametrisierte SQL-Abfragen; Suchbegriffe werden auf Buchstaben und Ziffern reduziert, bevor sie in die tsquery gehen | `pages.spec.ts`, `rights.spec.ts`, `search.spec.ts` |
-| S10 | Keine Konto-Ausforschung | Gleiche Antwort und gleiche Argon2-Arbeit bei unbekannter E-Mail (Login, Reset); Sperren gelten auch für unbekannte Adressen | `auth.spec.ts` |
-| S12 | Audit-Log | Anmeldungen, Fehlversuche, Rechteänderungen (auch Space-Rollen und Seiteneinschränkungen), Admin-Aktionen, Spaces anlegen/ändern/archivieren, Seiten und Anhänge löschen, Seiten wiederherstellen, API-Tokens, OAuth-Verbindungen und jede Änderung über den MCP-Server, jeweils mit IP; nur anhängbar (Datenbank-Trigger); 365 Tage Aufbewahrung | `auth.spec.ts`, `admin.spec.ts`, `rights.spec.ts`, `attachments.spec.ts`, `mcp.spec.ts`, `oauth.spec.ts` |
+- Passwörter mit Argon2id, Pflicht-2FA (TOTP) mit verschlüsseltem Geheimnis, gestaffelte Sperren nach Fehlversuchen und Rate-Limits für Anmeldung, API, Uploads und MCP.
+- Sitzungen serverseitig in Redis, Cookie `__Host-session` (HttpOnly, Secure, SameSite=Lax), CSRF-Schutz per Double-Submit-Token und Origin-Prüfung.
+- Seiteninhalte als TipTap-JSON mit Whitelist in API und Weboberfläche, kein `dangerouslySetInnerHTML`, Content-Security-Policy mit Nonce je Anfrage.
+- Uploads mit Typerkennung am Inhalt, Ablage außerhalb des Web-Roots, Auslieferung nur mit Rechteprüfung.
+- Zentrale Rechteprüfung (`PermissionService`, „verweigern“ als Standard), die Baum, Suche, Anhänge und MCP gemeinsam nutzen.
+- Nur anhängbares Audit-Log (365 Tage) für Anmeldungen, Rechteänderungen, Admin-Aktionen, Löschungen, Tokens und jede Änderung über MCP.
+- Secret-Scan, `pnpm audit`, Container-Scan und OWASP-ZAP in der CI, Abhängigkeiten über Renovate.
 
-Außerdem: Security-Header über Caddy und helmet (S11), Geheimnisse nur in `.env` plus Secret-Scan (S13), Renovate, `pnpm audit` und Trivy in der CI (S14). Bilder lassen sich weiterhin auch per https-Adresse einbinden; dabei sieht der fremde Server die IP-Adresse der Lesenden. Hochgeladene Bilder vermeiden das.
-
-Lesende Zugriffe von Systemadministratoren werden nicht einzeln ins Audit-Log geschrieben (das Konzept sah das vor); Änderungen schon. Grund: jeder Seitenaufruf eines Admins würde sonst einen Eintrag erzeugen.
-
-Hinweis zum Zurücksetzen der 2FA durch einen Admin: Danach kann sich die Person mit ihrem Passwort anmelden und die 2FA neu einrichten. Deshalb vorher die Identität der Person prüfen (z. B. telefonisch).
+Bilder lassen sich auch per https-Adresse einbinden; dabei sieht der fremde Server die IP-Adresse der Lesenden. Hochgeladene Bilder vermeiden das. Vor dem Zurücksetzen der 2FA einer Person deren Identität prüfen (z. B. telefonisch).
 
 ## API
 
@@ -242,4 +258,4 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | --- | --- |
 | M4 Go-live | Umgesetzt bis auf den Pilotbetrieb selbst (Checkliste in [docs/go-live.md](docs/go-live.md)) |
 | M5 Zusammenarbeit | Kommentare, Benachrichtigungen, Vorlagen, Labels; Hintergrund-Worker (BullMQ) für Mails und ggf. Volltext aus PDF-Anhängen |
-| M6 Ausbau | Gleichzeitiges Bearbeiten, Export, API-Tokens, Webhooks |
+| M6 Ausbau | Gleichzeitiges Bearbeiten von Wiki-Seiten, Export, Webhooks |
