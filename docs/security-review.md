@@ -2,7 +2,8 @@
 
 Für Security-Reviews gibt es im Repo einen eigenen Claude-Code-Subagenten: `.claude/agents/security-reviewer.md`. Er liest
 Code, findet Lücken und liefert sie im Format des Registers unter `.security-audit/`. Er ändert keinen Code und hat nur
-lesende Werkzeuge (Read, Grep, Glob, Bash). Behoben wird in der aufrufenden Sitzung, über einen normalen PR.
+lesende Werkzeuge (Read, Grep, Glob), bewusst ohne Bash: Dass er nichts ausführt, schreibt oder ins Netz schickt, hängt
+damit nicht am Prompt, sondern an seinen Werkzeugen. Behoben wird in der aufrufenden Sitzung, über einen normalen PR.
 
 ## Wann
 
@@ -24,7 +25,10 @@ Lass den security-reviewer die Anhänge (apps/api/src/attachments) prüfen.
 Lass den security-reviewer prüfen, ob SEC-007 und SEC-020 noch bestehen.
 ```
 
-Alternativ über `/agents` auswählen. Ohne Umfang prüft er den Diff des aktuellen Branches gegen `main`. In einem
+Alternativ über `/agents` auswählen. Weil der Subagent keine Shell hat, holt die aufrufende Sitzung bei einem Diff-Review
+den Diff (`git diff main...HEAD`) und die Commit-Liste (`git log --oneline main..HEAD`) und gibt beides im Auftrag mit;
+bei einem großen Diff schreibt sie ihn in eine Datei (z. B. im Scratchpad) und nennt den Pfad. Claude macht das bei den
+Sätzen oben von selbst. Fehlt der Diff, meldet der Subagent das, statt zu raten. In einem
 Projekt-Thread auf claude.ai reicht derselbe Satz, etwa „mach einen Security-Review mit dem security-reviewer“.
 
 Der Bericht enthält neue Findings (vorläufig `SEC-NEU-1` usw.) mit Schweregrad, Fundstelle, Wirkung und Fix-Empfehlung, eine
