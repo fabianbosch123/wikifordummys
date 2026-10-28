@@ -6,7 +6,7 @@ Für die Entwicklung einer Android-App gibt es im Repo einen eigenen Claude-Code
 `apps/android`; nennt der Auftrag eine andere App oder einen anderen Ordner, baut er diese.
 
 Anders als der `security-reviewer` hat er Schreibrechte und eine Shell (Read, Grep, Glob, Edit, Write, Bash), weil er Code
-anlegen und Gradle ausführen muss. Committen, pushen und den PR öffnen macht die aufrufende Sitzung.
+anlegen und Gradle ausführen muss. Committen, pushen und den PR öffnen macht die aufrufende Sitzung, nach einem Security-Review (siehe unten).
 
 ## Wann
 
@@ -29,6 +29,21 @@ Alternativ über `/agents` auswählen. In einem Projekt-Thread auf claude.ai rei
 
 Der Subagent liefert einen kurzen Bericht zurück: geänderte Dateien, was gebaut und getestet wurde, was nicht geprüft werden
 konnte, offene Entscheidungen und Vorschläge für Änderungen am Server.
+
+## Security-Review vor jedem PR
+
+Jeder PR mit Änderungen an der App geht erst an Fabian, wenn der `security-reviewer` den Diff geprüft hat. Weil ein
+Subagent keinen weiteren Subagenten starten kann und der `security-reviewer` keine Shell hat, steuert das die aufrufende
+Sitzung:
+
+1. Der `android-developer` baut und schreibt den Diff gegen `main` in eine Datei; den Pfad nennt er im Bericht.
+2. Die aufrufende Sitzung lässt den `security-reviewer` diesen Diff prüfen.
+3. Bei Critical, High oder Medium gibt sie die Findings an den `android-developer` zurück; er behebt sie, danach läuft der
+   Review noch einmal über den neuen Diff.
+4. Erst dann öffnet sie den PR, mit einem Abschnitt „Security-Review“: Ergebnis, behobene Findings und was offen bleibt
+   (Low, Info, offene Entscheidungen). Kein Critical/High darf offen sein; ein offenes Medium nur mit Begründung.
+
+Die Regel steht auch in `CLAUDE.md` im Repo-Wurzelverzeichnis, damit jede Sitzung sie kennt, nicht nur der Subagent.
 
 ## Bauen und testen
 
