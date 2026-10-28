@@ -1,0 +1,22 @@
+# Gradle und Build
+.gradle/
+.kotlin/
+build/
+captures/
+.cxx/
+.externalNativeBuild/
+
+# Nur auf dem eigenen Rechner gültig
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Signaturschlüssel gehören nie ins Repo
+*.jks
+*.keystore
+*.p12
+
+# Die .gitignore im Repo-Wurzelverzeichnis schließt "data/" aus (Laufzeitdaten des Servers).
+# Hier heißen Kotlin-Pakete so (z. B. server/data), deshalb wieder einschließen.
+!data/
