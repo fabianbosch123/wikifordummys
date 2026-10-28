@@ -18,6 +18,8 @@ RUN wget -q -O /tmp/draw.war "https://github.com/jgraph/drawio/releases/download
 COPY PreConfig.js /srv/draw/js/PreConfig.js
 
 FROM ${CADDY_IMAGE}
+# Sicherheitsupdates aus Alpine, solange das Caddy-Image sie noch nicht enthält (z. B. brotli-libs, CVE-2026-111497)
+RUN apk upgrade --no-cache
 COPY --from=fetch /srv/draw /srv/draw
 COPY Caddyfile /etc/caddy/Caddyfile
 EXPOSE 8080

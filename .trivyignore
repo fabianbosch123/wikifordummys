@@ -1,0 +1,5 @@
+# Bewusst ignorierte Funde im Trivy-Scan der Images (.github/workflows/ci.yml). Jeder Eintrag mit Begründung und Datum.
+
+# Go-stdlib in caddy (draw.io-Image): os.Root.Mkdir folgt Junctions nur unter Windows; die Images laufen unter Linux.
+# Entfernen, sobald caddy:2 mit Go >= 1.26.9 gebaut ist. (2026-10-28)
+CVE-2026-56857
