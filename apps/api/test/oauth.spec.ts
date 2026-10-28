@@ -150,7 +150,7 @@ describe('Zustimmung und Tokens', () => {
     expect((await http().get(`/api/v1/oauth/authorize/check?${new URLSearchParams(params)}`)).status).toBe(401);
     const check = await anna.client.get(`/oauth/authorize/check?${new URLSearchParams(params)}`);
     expect(check.status).toBe(200);
-    expect(check.body).toEqual({ clientName: 'Claude', redirectHost: 'claude.ai', requestedScope: 'write' });
+    expect(check.body).toEqual({ kind: 'mcp', clientName: 'Claude', redirectHost: 'claude.ai', requestedScope: 'write' });
 
     // Ohne gültigen 2FA-Code keine Zustimmung
     expect((await anna.client.post('/oauth/authorize', { ...params, approve: true, code: '000000' })).status).toBe(401);

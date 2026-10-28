@@ -383,8 +383,17 @@ export interface MyApiTokensDto {
   tokens: ApiTokenDto[];
 }
 
-/** Zustimmungsseite für OAuth (claude.ai-Connector): wer fragt an und wohin geht es danach */
+/**
+ * Fest eingebauter OAuth-Client der Android-App (apps/android). Er wird nicht registriert, sondern ist im Server
+ * hinterlegt; Rücksprung nur über das private Schema der App (RFC 8252, 7.1), Schutz des Codes über PKCE.
+ */
+export const APP_OAUTH_CLIENT_ID = '7f1c2b9e-4d3a-4e8f-9b6a-a9d0c1e2f3a4';
+export const APP_OAUTH_REDIRECT_URI = 'de.wikifordummys.app:/oauth/callback';
+
+/** Zustimmungsseite für OAuth (claude.ai-Connector oder Android-App): wer fragt an und wohin geht es danach */
 export interface OAuthConsentInfoDto {
+  /** mcp: Client über den MCP-Server (z. B. Claude); app: die Android-App des Wikis */
+  kind: 'mcp' | 'app';
   /** Vom Client selbst gewählter Name, deshalb nur als Hinweis anzeigen */
   clientName: string;
   /** Host der Rücksprungadresse, z. B. claude.ai; der verlässliche Teil */

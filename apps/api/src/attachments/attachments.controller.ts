@@ -1,6 +1,6 @@
 import { Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { Auth } from '../common/decorators';
+import { AppTokenAllowed, Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
 import { DownloadQuery, UploadQuery, VersionQuery } from './attachments.dto';
@@ -17,6 +17,8 @@ function sendDownload(res: Response, { file, etag }: AttachmentDownload, cacheCo
   return undefined;
 }
 
+/** Lesend auch für die Android-App (AppTokenAllowed, nur GET/HEAD) */
+@AppTokenAllowed()
 @Controller()
 export class AttachmentsController {
   constructor(private readonly attachments: AttachmentsService) {}

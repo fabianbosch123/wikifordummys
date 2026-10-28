@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Matches, Max, Min } from 'class-validator';
-import { Auth } from '../common/decorators';
+import { AppTokenAllowed, Auth } from '../common/decorators';
 import { AuthContext } from '../common/request-context';
 import { SearchService } from './search.service';
 
@@ -22,6 +22,8 @@ export class SearchQuery {
   offset?: number;
 }
 
+/** Lesend auch für die Android-App (AppTokenAllowed, nur GET/HEAD) */
+@AppTokenAllowed()
 @Controller('search')
 export class SearchController {
   constructor(private readonly search: SearchService) {}

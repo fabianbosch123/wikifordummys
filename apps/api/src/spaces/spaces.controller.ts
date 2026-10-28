@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
-import { Auth } from '../common/decorators';
+import { AppTokenAllowed, Auth } from '../common/decorators';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
 import { PagesService } from '../pages/pages.service';
 import { CreateSpaceDto, ListSpacesQuery, SetSpacePermissionsDto, UpdateSpaceDto } from './spaces.dto';
 import { SpacesService } from './spaces.service';
 
+/** Lesend auch für die Android-App (AppTokenAllowed, nur GET/HEAD) */
+@AppTokenAllowed()
 @Controller('spaces')
 export class SpacesController {
   constructor(
