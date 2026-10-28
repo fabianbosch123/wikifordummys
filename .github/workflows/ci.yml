@@ -99,8 +99,8 @@ jobs:
       - name: Trivy-Scan
         # Trivy als festes Image statt als Action, damit keine fremden Action-Tags ausgeführt werden
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.65.0 \
-            image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress wikifordummys-${{ matrix.app }}:ci
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.65.0 \
+            image --severity CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 --no-progress wikifordummys-${{ matrix.app }}:ci
 
   # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung
   # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
