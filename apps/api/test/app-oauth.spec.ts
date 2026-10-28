@@ -184,6 +184,8 @@ describe('Android-App: Anmeldung per OAuth', () => {
     expect((await appGet('/auth/session', access_token)).status).toBe(403);
     expect((await appGet('/.well-known/oauth-protected-resource/api/v1/mcp', 'wfd_irgendein-mcp-token')).status).toBe(200);
     expect((await appGet('/health', 'nicht-bearer').set('Authorization', 'Basic eDp5')).status).not.toBe(401);
+    // Der Office-Editor-Server schickt beim Abruf sein JWT als Bearer mit (wikictl office-check holt /api/v1/health)
+    expect((await appGet('/health', 'eyJhbGciOiJIUzI1NiJ9.e30.x')).status).not.toBe(401);
   });
 
   it('erlaubt für die App höchstens 30 Tage', async () => {

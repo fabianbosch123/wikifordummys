@@ -45,7 +45,9 @@ export class AuthMiddleware implements NestMiddleware {
   async use(req: WikiRequest, res: Response, next: NextFunction) {
     try {
       const path = req.originalUrl.split('?')[0];
-      const bearer = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? '')?.[1];
+      // Nur Tokens im Format des Wikis; andere Bearer-Werte (z. B. das JWT des Office-Editor-Servers beim Abruf von
+      // /api/v1/health in wikictl office-check) bleiben unbeachtet wie vor der App-Anmeldung
+      const bearer = /^Bearer\s+(wfd_\S*)$/i.exec(req.headers.authorization ?? '')?.[1];
       if (bearer !== undefined && !OWN_AUTHORIZATION.some((p) => path === p || path.startsWith(p))) {
         await this.useAppToken(req, bearer);
         return next();
