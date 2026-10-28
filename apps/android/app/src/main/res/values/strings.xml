@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">wikifordummys</string>
+
+    <!-- Startbildschirm: Wiki-Adresse -->
+    <string name="server_setup_title">Wiki-Adresse eingeben</string>
+    <string name="server_setup_intro">Gib die Adresse deines Wikis ein, zum Beispiel https://wiki.example.de. Die App verbindet sich nur über HTTPS.</string>
+    <string name="server_setup_field_label">Wiki-Adresse</string>
+    <string name="server_setup_field_placeholder">https://wiki.example.de</string>
+    <string name="server_setup_submit">Weiter</string>
+    <string name="server_setup_checking">Adresse wird geprüft …</string>
+
+    <!-- Fehler bei der Eingabe -->
+    <string name="error_url_empty">Bitte eine Adresse eingeben.</string>
+    <string name="error_url_too_long">Die Adresse ist zu lang.</string>
+    <string name="error_url_malformed">Das ist keine gültige Adresse.</string>
+    <string name="error_url_not_https">Nur Adressen mit https:// sind erlaubt.</string>
+    <string name="error_url_credentials">Die Adresse darf keinen Benutzernamen und kein Passwort enthalten.</string>
+    <string name="error_url_path">Bitte nur die Adresse des Wikis angeben, ohne Pfad, Parameter oder Anker.</string>
+
+    <!-- Fehler bei der Prüfung des Servers -->
+    <string name="error_server_unreachable">Das Wiki ist nicht erreichbar. Bitte Adresse und Internetverbindung prüfen.</string>
+    <string name="error_server_tls">Keine sichere Verbindung möglich: Das Zertifikat des Wikis wird von diesem Gerät nicht anerkannt.</string>
+    <string name="error_server_not_wiki">Unter dieser Adresse antwortet kein wikifordummys.</string>
+    <string name="error_server_unhealthy">Das Wiki ist erreichbar, meldet aber eine Störung. Bitte später erneut versuchen.</string>
+    <string name="error_server_rate_limited">Zu viele Anfragen. Bitte kurz warten und erneut versuchen.</string>
+    <string name="error_server_http">Das Wiki antwortet mit einem Fehler (HTTP %1$d).</string>
+    <string name="error_save_failed">Die Adresse konnte nicht gespeichert werden.</string>
+
+    <!-- Platzhalter nach dem Speichern -->
+    <string name="home_title">Wiki verbunden</string>
+    <string name="home_saved_address">Gespeicherte Adresse: %1$s</string>
+    <string name="home_login_pending">Die Anmeldung folgt in einer späteren Version der App.</string>
+    <string name="home_change_server">Andere Adresse eingeben</string>
+</resources>
