@@ -9,3 +9,7 @@ paths = [
   '''apps/api/src/.*\.spec\.ts''',
   '''e2e/''',
 ]
+# Öffentliche OAuth-Client-ID der Android-App (packages/shared, APP_OAUTH_CLIENT_ID): kein Geheimnis, steht auch in der App
+regexes = [
+  '''^7f1c2b9e-4d3a-4e8f-9b6a-a9d0c1e2f3a4$''',
+]
