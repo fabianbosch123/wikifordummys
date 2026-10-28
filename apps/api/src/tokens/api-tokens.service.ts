@@ -179,6 +179,12 @@ export class ApiTokensService {
 
   // ---------- Anmeldung mit Token ----------
 
+  /** Gibt es dieses Token (auch abgelaufen oder widerrufen)? Unterscheidet Raten von einem veralteten Token */
+  async isKnown(raw: string): Promise<boolean> {
+    if (!TOKEN_PATTERN.test(raw)) return false;
+    return (await this.prisma.apiToken.count({ where: { tokenHash: this.crypto.sha256(raw) } })) > 0;
+  }
+
   /**
    * Prüft ein Token aus dem Authorization-Header. null bei unbekanntem, abgelaufenem oder widerrufenem Token,
    * bei deaktiviertem Konto und solange das Startpasswort nicht geändert ist.

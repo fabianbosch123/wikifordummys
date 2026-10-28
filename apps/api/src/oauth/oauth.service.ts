@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { OAuthClient } from '@prisma/client';
-import { API_TOKEN_LIFETIMES_DAYS, type ApiTokenScope, type OAuthConsentInfoDto } from '@wiki/shared';
+import { API_TOKEN_LIFETIMES_DAYS, APP_OAUTH_CLIENT_ID, APP_OAUTH_REDIRECT_URI, type ApiTokenScope, type OAuthConsentInfoDto } from '@wiki/shared';
 import type Redis from 'ioredis';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
@@ -62,6 +62,10 @@ export interface TokenResponse {
 
 const isLoopback = (host: string) => host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 
+export const APP_CLIENT_NAME = 'wikifordummys Android-App';
+export const APP_MAX_DAYS = 30;
+export const isAppClient = (client: Pick<OAuthClient, 'id'>) => client.id === APP_OAUTH_CLIENT_ID;
+
 /**
  * Kleiner OAuth-2.1-Server für den MCP-Server, wie ihn die MCP-Spezifikation vorsieht: Metadaten (RFC 8414, RFC 9728),
  * Dynamic Client Registration (RFC 7591), Autorisierungscode nur mit PKCE S256, Refresh-Tokens mit Rotation und
@@ -70,6 +74,10 @@ const isLoopback = (host: string) => host === 'localhost' || host === '127.0.0.1
  * Eine Zustimmung ist eine Zeile in api_tokens (wie ein Token aus dem Profil, mit client_id): Sie erscheint in denselben
  * Listen, lässt sich genauso widerrufen und hat dieselben Rechte wie ihr Benutzer. Zustimmen verlangt eine vollständige
  * Anmeldung im Wiki und zusätzlich den aktuellen 2FA-Code.
+ *
+ * Zusätzlich gibt es einen fest eingebauten Client für die Android-App (APP_OAUTH_CLIENT_ID): Seine Tokens gelten nur
+ * an der REST-API und nur lesend (auth.middleware.ts, auth.guard.ts), nicht am MCP-Server, und er hängt nicht am
+ * MCP-Schalter der Administration.
  */
 @Injectable()
 export class OAuthService {
@@ -125,12 +133,19 @@ export class OAuthService {
     };
   }
 
+  /** Ressource der Android-App: die REST-API */
+  get appResource(): string {
+    return `${this.issuer}/api/v1`;
+  }
+
   /** Adresse in der Antwort 401 des MCP-Servers (WWW-Authenticate: resource_metadata) */
   get resourceMetadataUrl(): string {
     return `${this.issuer}/.well-known/oauth-protected-resource${new URL(this.tokens.endpoint).pathname}`;
   }
 
-  private async requireEnabled() {
+  /** Der MCP-Schalter gilt für alle Clients außer der Android-App */
+  private async requireEnabled(client?: OAuthClient) {
+    if (client && isAppClient(client)) return;
     if (!(await this.tokens.isEnabled())) throw new OAuthError('access_denied', 'Der MCP-Zugang ist in der Administration ausgeschaltet.', 403);
   }
 
@@ -183,7 +198,9 @@ export class OAuthService {
     const secret = method === 'none' ? null : this.crypto.randomToken(32);
 
     // Angefangene Registrierungen ohne Zustimmung nicht ewig aufheben
-    await this.prisma.oAuthClient.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - DAY_MS) }, tokens: { none: {} } } });
+    await this.prisma.oAuthClient.deleteMany({
+      where: { id: { not: APP_OAUTH_CLIENT_ID }, createdAt: { lt: new Date(Date.now() - DAY_MS) }, tokens: { none: {} } },
+    });
     const client = await this.prisma.oAuthClient.create({
       data: { name, redirectUris, secretHash: secret ? this.crypto.sha256(secret) : null, createdIp: ip },
     });
@@ -201,6 +218,13 @@ export class OAuthService {
   }
 
   private async loadClient(id: unknown): Promise<OAuthClient> {
+    // Der App-Client steht nicht in der Registrierung, sondern im Code; Name und Rücksprung lassen sich nicht ändern
+    if (id === APP_OAUTH_CLIENT_ID) {
+      const fixed = { name: APP_CLIENT_NAME, redirectUris: [APP_OAUTH_REDIRECT_URI], secretHash: null };
+      const upsert = () => this.prisma.oAuthClient.upsert({ where: { id: APP_OAUTH_CLIENT_ID }, create: { id: APP_OAUTH_CLIENT_ID, ...fixed }, update: fixed });
+      // Zwei gleichzeitige erste Aufrufe: der zweite legt nicht an, sondern aktualisiert
+      return upsert().catch(upsert);
+    }
     const client =
       typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id) ? await this.prisma.oAuthClient.findUnique({ where: { id } }) : null;
     if (!client) throw new OAuthError('invalid_client', 'Unbekannter Client.', 401);
@@ -214,8 +238,9 @@ export class OAuthService {
    * nie per Weiterleitung gemeldet (sonst ließe sich der Rücksprung missbrauchen, RFC 6749 4.1.2.1).
    */
   async describe(params: AuthorizeParams): Promise<{ client: OAuthClient; info: OAuthConsentInfoDto }> {
-    await this.requireEnabled();
     const client = await this.loadClient(params.client_id);
+    await this.requireEnabled(client);
+    const app = isAppClient(client);
     if (!params.redirect_uri || !client.redirectUris.includes(params.redirect_uri)) {
       throw new OAuthError('invalid_request', 'Die redirect_uri ist für diesen Client nicht registriert.');
     }
@@ -223,18 +248,25 @@ export class OAuthService {
     if (params.code_challenge_method !== 'S256' || !/^[A-Za-z0-9_-]{43,128}$/.test(params.code_challenge ?? '')) {
       throw new OAuthError('invalid_request', 'PKCE mit code_challenge_method=S256 ist Pflicht.');
     }
-    if (params.resource && params.resource.replace(/\/$/, '') !== this.tokens.endpoint) {
-      throw new OAuthError('invalid_target', 'Unbekannte resource; dieser Server ist nur für den MCP-Server des Wikis zuständig.');
+    if (params.resource && !this.resourceFits(client, params.resource)) {
+      throw new OAuthError('invalid_target', 'Unbekannte resource für diesen Client.');
     }
     const scopes = (params.scope ?? '').split(' ').filter(Boolean);
     return {
       client,
       info: {
+        kind: app ? 'app' : 'mcp',
         clientName: client.name,
-        redirectHost: new URL(params.redirect_uri).host,
-        requestedScope: scopes.length && !scopes.includes('write') ? 'read' : 'write',
+        redirectHost: app ? 'Android-App' : new URL(params.redirect_uri).host,
+        // Die App liest vorerst nur
+        requestedScope: app || (scopes.length && !scopes.includes('write')) ? 'read' : 'write',
       },
     };
+  }
+
+  /** MCP-Clients bekommen Tokens für den MCP-Server, die App für die REST-API */
+  private resourceFits(client: OAuthClient, resource: unknown): boolean {
+    return String(resource).replace(/\/$/, '') === (isAppClient(client) ? this.appResource : this.tokens.endpoint);
   }
 
   /**
@@ -257,6 +289,8 @@ export class OAuthService {
     }
     const days = params.expiresInDays ?? 90;
     if (!(API_TOKEN_LIFETIMES_DAYS as readonly number[]).includes(days)) throw new OAuthError('invalid_request', 'Ungültige Gültigkeit.');
+    // Das private Schema der App kann auch eine fremde App beanspruchen (RFC 8252, 8.6): Zustimmungen deshalb kurz halten
+    if (isAppClient(app) && days > APP_MAX_DAYS) throw new OAuthError('invalid_request', `Für die App höchstens ${APP_MAX_DAYS} Tage.`);
     await this.auth.confirmTotp(ctx.user.id, params.code ?? '', client, 'oauth_consent');
     const code = this.crypto.randomToken(32);
     const stored: StoredCode = {
@@ -264,7 +298,7 @@ export class OAuthService {
       redirectUri: params.redirect_uri!,
       challenge: params.code_challenge!,
       userId: ctx.user.id,
-      scope: params.scope_choice === 'read' ? 'read' : 'write',
+      scope: isAppClient(app) || params.scope_choice === 'read' ? 'read' : 'write',
       days,
     };
     await this.redis.set(`oauth:code:${this.crypto.sha256(code)}`, JSON.stringify(stored), 'EX', CODE_SEC);
@@ -288,8 +322,8 @@ export class OAuthService {
 
   async token(body: Record<string, unknown>, basic: { id: string; secret: string } | null, ip: string): Promise<TokenResponse> {
     await this.limiter.enforce([{ key: `oauth-token:ip:${ip}`, limit: 60, windowSec: 60 }]);
-    await this.requireEnabled();
     const client = await this.authenticateClient(body, basic);
+    await this.requireEnabled(client);
     if (body.grant_type === 'authorization_code') return this.exchangeCode(client, body, ip);
     if (body.grant_type === 'refresh_token') return this.refresh(client, body, ip);
     throw new OAuthError('unsupported_grant_type', 'Nur authorization_code und refresh_token.');
@@ -307,7 +341,7 @@ export class OAuthService {
     if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || !this.crypto.safeEqual(challenge, stored.challenge)) {
       throw new OAuthError('invalid_grant', 'PKCE-Prüfung fehlgeschlagen.');
     }
-    if (body.resource !== undefined && String(body.resource).replace(/\/$/, '') !== this.tokens.endpoint) {
+    if (body.resource !== undefined && !this.resourceFits(client, body.resource)) {
       throw new OAuthError('invalid_target', 'Unbekannte resource.');
     }
     const user = await this.users.loadActive(stored.userId);

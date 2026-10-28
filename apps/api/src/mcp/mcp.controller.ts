@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { All, Controller, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import { APP_OAUTH_CLIENT_ID } from '@wiki/shared';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Response } from 'express';
 import { AuditService } from '../audit/audit.service';
@@ -19,7 +20,8 @@ const invalidToken = () => new ApiError(401, 'INVALID_TOKEN', 'Fehlendes, ungül
  *
  * Anmeldung nur per „Authorization: Bearer <API-Token>“, nie per Cookie: Ein Browser kann diesen Endpunkt so nicht
  * im Namen eines angemeldeten Benutzers aufrufen (deshalb auch ohne CSRF-Token, siehe csrf.middleware.ts).
- * Umgekehrt gelten API-Tokens nur hier und nicht für die übrige API.
+ * Umgekehrt gelten API-Tokens nur hier und nicht für die übrige API; nur die Tokens der Android-App gelten dort
+ * (lesend) und dafür nicht hier.
  */
 @Public()
 @Controller('mcp')
@@ -50,7 +52,9 @@ export class McpController {
     await this.limiter.assertNotLocked(scope);
     const header = req.headers.authorization ?? '';
     const raw = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
-    const auth = raw ? await this.tokens.authenticate(raw, ip) : null;
+    const found = raw ? await this.tokens.authenticate(raw, ip) : null;
+    // Tokens der Android-App gelten nur an der REST-API (auth.middleware.ts)
+    const auth = found && found.token.clientId !== APP_OAUTH_CLIENT_ID ? found : null;
     if (!auth) {
       // resource_metadata führt OAuth-Clients wie claude.ai zur Anmeldung (RFC 9728)
       res.setHeader('WWW-Authenticate', `Bearer realm="wikifordummys", resource_metadata="${this.oauth.resourceMetadataUrl}"`);

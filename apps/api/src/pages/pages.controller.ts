@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
-import { Auth } from '../common/decorators';
+import { AppTokenAllowed, Auth } from '../common/decorators';
 import { AuthContext, clientIp, WikiRequest } from '../common/request-context';
 import { CreatePageDto, DiffQuery, MovePageDto, SetRestrictionsDto, UpdatePageDto } from './pages.dto';
 import { PagesService } from './pages.service';
@@ -7,6 +7,8 @@ import { RestrictionsService } from './restrictions.service';
 
 const uuid = new ParseUUIDPipe({ version: undefined });
 
+/** Lesend auch für die Android-App (AppTokenAllowed, nur GET/HEAD) */
+@AppTokenAllowed()
 @Controller('pages')
 export class PagesController {
   constructor(

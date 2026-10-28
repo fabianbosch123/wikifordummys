@@ -54,9 +54,14 @@ oder `./gradlew` im Terminal) bleibt dann der letzte Schritt.
 
 ## Was der Subagent bewusst nicht entscheidet
 
-- **Anmeldung der App.** Die REST-API meldet heute nur Browser per Cookie mit CSRF an; ein Bearer-Token gilt bisher nur am
-  MCP-Endpunkt, OAuth 2.1 mit PKCE gibt es für Connectors. Ob die App die Cookie-Sitzung nutzt, OAuth über den Browser oder
-  API-Tokens, ist eine Entscheidung, die der Subagent meldet statt sie selbst zu treffen.
+- **Anmeldung der App.** Entschieden (2026-10-28): OAuth 2.1 mit PKCE über den Browser, mit einem fest eingebauten
+  App-Client. App-Tokens gelten an der REST-API nur lesend und nur für Spaces, Seiten, Suche, Anhänge und das eigene Profil;
+  Konto, Tokens und Administration bleiben der Weboberfläche. Erweiterungen (z. B. Bearbeiten in der App) sind eine neue
+  Entscheidung mit eigenem Server-PR.
+  Restrisiko: Der Rücksprung läuft über das private Schema `de.wikifordummys.app:`, das auch eine fremde App auf dem Gerät
+  beanspruchen kann. Deshalb gilt eine App-Zustimmung höchstens 30 Tage, und die Zustimmungsseite warnt davor. Der bessere
+  Weg ist ein verifizierter App Link auf der Wiki-Domain (`/.well-known/assetlinks.json` mit dem Signaturzertifikat), sobald
+  die App signiert veröffentlicht wird.
 - **Änderungen am Server.** Braucht die App neue Endpunkte, Bearer-Anmeldung an der REST-API oder CORS, schlägt er das vor,
   ändert `apps/api` aber nicht. Solche Änderungen laufen als eigener PR und, weil sie Anmeldung und Rechte betreffen, über den
   `security-reviewer` (siehe [security-review.md](security-review.md)).

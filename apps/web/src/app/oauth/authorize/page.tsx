@@ -32,7 +32,8 @@ function Consent({ user }: { user: MeDto }) {
     api<OAuthConsentInfoDto>(`/oauth/authorize/check?${new URLSearchParams(request)}`).then(
       (i) => {
         setInfo(i);
-        setForm((f) => ({ ...f, scope: i.requestedScope }));
+        // Die App bekommt höchstens 30 Tage (oauth.service.ts, APP_MAX_DAYS)
+        setForm((f) => ({ ...f, scope: i.requestedScope, expiresInDays: i.kind === 'app' ? 30 : f.expiresInDays }));
       },
       (err) => setError(errorMessage(err)),
     );
@@ -66,24 +67,44 @@ function Consent({ user }: { user: MeDto }) {
     );
   }
 
+  const app = info.kind === 'app';
   return (
     <div className="narrow">
       <h1>Zugriff auf das Wiki</h1>
       <Card>
-        <p>
-          <strong>{info.clientName}</strong> möchte über den MCP-Server mit deinem Konto <strong>{user.displayName}</strong> ({user.email}) auf
-          das Wiki zugreifen.
-        </p>
-        <Alert kind="info">
-          Nach der Zustimmung geht es zurück zu <strong>{info.redirectHost}</strong>. Stimme nur zu, wenn du die Verbindung gerade selbst
-          angestoßen hast, z. B. beim Hinzufügen des Wikis als Connector in Claude.
-        </Alert>
-        <p className="muted">
-          Die Anwendung hat deine Rechte im Wiki (Spaces, Rollen, Einschränkungen). Löschen, Verschieben und Administration sind über MCP nicht
-          möglich. Widerrufen kannst du den Zugriff jederzeit unter Mein Konto.
-        </p>
+        {app ? (
+          <>
+            <p>
+              Die <strong>Android-App</strong> des Wikis möchte mit deinem Konto <strong>{user.displayName}</strong> ({user.email}) auf das Wiki
+              zugreifen.
+            </p>
+            <Alert kind="info">
+              Nach der Zustimmung geht es zurück in die App. Stimme nur zu, wenn du die Anmeldung gerade selbst in der offiziellen
+              wikifordummys-App gestartet hast: Auch eine andere App auf deinem Gerät könnte sich als Wiki-App ausgeben.
+            </Alert>
+            <p className="muted">
+              Die App sieht, was du im Wiki sehen darfst (Spaces, Rollen, Einschränkungen), und kann vorerst nur lesen. Widerrufen kannst du den
+              Zugriff jederzeit unter Mein Konto.
+            </p>
+          </>
+        ) : (
+          <>
+            <p>
+              <strong>{info.clientName}</strong> möchte über den MCP-Server mit deinem Konto <strong>{user.displayName}</strong> ({user.email})
+              auf das Wiki zugreifen.
+            </p>
+            <Alert kind="info">
+              Nach der Zustimmung geht es zurück zu <strong>{info.redirectHost}</strong>. Stimme nur zu, wenn du die Verbindung gerade selbst
+              angestoßen hast, z. B. beim Hinzufügen des Wikis als Connector in Claude.
+            </Alert>
+            <p className="muted">
+              Die Anwendung hat deine Rechte im Wiki (Spaces, Rollen, Einschränkungen). Löschen, Verschieben und Administration sind über MCP
+              nicht möglich. Widerrufen kannst du den Zugriff jederzeit unter Mein Konto.
+            </p>
+          </>
+        )}
         <form onSubmit={submit}>
-          <div className="field">
+          <div className="field" hidden={app}>
             <label htmlFor={scopeId}>Rechte</label>
             <select id={scopeId} value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value as ApiTokenScope })}>
               <option value="write">{SCOPE_LABEL.write}</option>
@@ -93,7 +114,7 @@ function Consent({ user }: { user: MeDto }) {
           <div className="field">
             <label htmlFor={lifetimeId}>Gültig für</label>
             <select id={lifetimeId} value={form.expiresInDays} onChange={(e) => setForm({ ...form, expiresInDays: Number(e.target.value) })}>
-              {API_TOKEN_LIFETIMES_DAYS.map((d) => (
+              {API_TOKEN_LIFETIMES_DAYS.filter((d) => !app || d <= 30).map((d) => (
                 <option key={d} value={d}>
                   {d} Tage
                 </option>

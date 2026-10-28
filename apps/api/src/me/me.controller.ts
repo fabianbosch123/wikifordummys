@@ -5,7 +5,7 @@ import { IsString, Length, Matches, MaxLength } from 'class-validator';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
-import { AllowPendingPasswordChange, Auth } from '../common/decorators';
+import { AllowPendingPasswordChange, AppTokenAllowed, Auth } from '../common/decorators';
 import { Errors } from '../common/errors';
 import { AuthContext, clientIp, meDto, userAgent, WikiRequest } from '../common/request-context';
 import { PrismaService } from '../infra/prisma.service';
@@ -42,6 +42,7 @@ export class MeController {
   ) {}
 
   @AllowPendingPasswordChange()
+  @AppTokenAllowed()
   @Get()
   me(@Auth() ctx: AuthContext): MeDto {
     return meDto(ctx.user);

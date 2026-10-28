@@ -26,8 +26,9 @@ Ist unklar, was gebaut werden soll, oder hängt eine Funktion an einer Entscheid
 
 ## Stand der Wiki-API, den du kennen musst
 
-- Die REST-API unter `/api` meldet Browser über das Cookie `__Host-session` an, mit Stufen password → 2FA → full und CSRF (Double Submit plus Origin-Prüfung). Ein Bearer-Token wird bisher nur am MCP-Endpunkt angenommen (`apps/api/src/mcp/mcp.controller.ts`); OAuth 2.1 mit PKCE gibt es unter `apps/api/src/oauth`.
-- Wie sich die App anmeldet (Cookie-Sitzung mit CSRF, OAuth mit PKCE über den Browser, API-Token), ist eine offene Entscheidung. Bau die Anmeldung nicht um diese Frage herum, sondern melde sie, solange der Auftrag sie nicht beantwortet.
+- Die REST-API unter `/api/v1` meldet Browser über das Cookie `__Host-session` an (Stufen password → 2FA → full, CSRF mit Double Submit und Origin-Prüfung). Die App nutzt diesen Weg nicht.
+- **Anmeldung der App (Entscheidung von Fabian, 2026-10-28): OAuth 2.1 mit PKCE S256 über den Browser (Custom Tabs).** Fester öffentlicher Client `APP_OAUTH_CLIENT_ID`, Rücksprung nur auf `APP_OAUTH_REDIRECT_URI` (`de.wikifordummys.app:/oauth/callback`), beide in `packages/shared/src/index.ts`. Autorisierung über `<wiki>/oauth/authorize` (Zustimmungsseite mit 2FA-Code), Token und Erneuerung über `POST /api/v1/oauth/token` (Formular, `resource=<wiki>/api/v1`), Abmelden über `POST /api/v1/oauth/revoke`. Immer `state` prüfen und `iss` mit der Wiki-Adresse vergleichen.
+- Das Access-Token (`wfd_…`, 1 h) geht als `Authorization: Bearer` an die REST-API, das Refresh-Token (`wfr_…`) wird bei jeder Erneuerung ausgetauscht; ein altes Refresh-Token noch einmal zu verwenden beendet die ganze Zustimmung. App-Tokens gelten nur lesend (GET/HEAD) und nur an Routen mit `@AppTokenAllowed()` (Spaces, Seiten, Suche, Anhänge, `GET /me`), nicht am MCP-Server. Antwort 401 heißt: erneuern oder neu anmelden; 403 heißt: dieser Weg ist für die App nicht freigegeben.
 - Änderungen an `apps/api` gehören nicht zu deinem Auftrag. Braucht die App etwas Neues vom Server (Endpunkt, Bearer an der REST-API, CORS), beschreibe es als Vorschlag mit Datei und Grund. Die aufrufende Sitzung entscheidet, und für Anmeldung und Rechte läuft danach der `security-reviewer`.
 
 ## Technik

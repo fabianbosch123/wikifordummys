@@ -20,8 +20,11 @@ export function meDto({ groupIds: _groupIds, ...me }: AuthUser): MeDto {
 }
 
 export interface AuthContext {
+  /** Bei Anmeldung per App-Token eine Sitzung ohne Eintrag in Redis (id token:<id>, token leer) */
   session: ActiveSession;
   user: AuthUser;
+  /** Gesetzt, wenn die Anfrage mit einem OAuth-Token der Android-App kam statt mit dem Session-Cookie */
+  appToken?: { id: string };
 }
 
 export type WikiRequest = Request & { auth?: AuthContext; csrfToken?: string };

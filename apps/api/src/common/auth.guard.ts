@@ -1,9 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { SessionStage } from '@wiki/shared';
-import { ADMIN_KEY, PASSWORD_CHANGE_KEY, PUBLIC_KEY, STAGES_KEY } from './decorators';
+import { ADMIN_KEY, APP_TOKEN_KEY, PASSWORD_CHANGE_KEY, PUBLIC_KEY, STAGES_KEY } from './decorators';
 import { Errors } from './errors';
 import type { WikiRequest } from './request-context';
+
+const READ_METHODS = new Set(['GET', 'HEAD']);
 
 /**
  * Zentraler Guard für jede Route (S8): Standard ist „verweigern“.
@@ -15,9 +17,14 @@ export class AuthGuard implements CanActivate {
 
   canActivate(ctx: ExecutionContext): boolean {
     const targets = [ctx.getHandler(), ctx.getClass()];
-    if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) return true;
-
     const req = ctx.switchToHttp().getRequest<WikiRequest>();
+
+    // Token der Android-App: nur markierte Routen und vorerst nur lesend (auth.middleware.ts), auch vor öffentlichen Routen
+    if (req.auth?.appToken && (!READ_METHODS.has(req.method) || !this.reflector.getAllAndOverride<boolean>(APP_TOKEN_KEY, targets))) {
+      throw Errors.forbidden();
+    }
+
+    if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) return true;
     if (!req.auth) throw Errors.unauthenticated();
 
     const allowed = this.reflector.getAllAndOverride<SessionStage[]>(STAGES_KEY, targets) ?? ['full'];
