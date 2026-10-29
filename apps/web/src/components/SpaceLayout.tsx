@@ -64,7 +64,7 @@ export function SpaceLayout({
             </Link>
           </p>
         )}
-        <PageTree nodes={tree.data} currentId={currentId} homePageId={s.homePageId} canEdit={s.canEdit} onMove={move} />
+        <PageTree spaceKey={s.key} nodes={tree.data} currentId={currentId} homePageId={s.homePageId} canEdit={s.canEdit} onMove={move} />
         <Alert>{error}</Alert>
         {s.role === 'admin' && (
           <p className="sidebar-foot">
