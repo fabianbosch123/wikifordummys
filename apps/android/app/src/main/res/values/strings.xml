@@ -27,9 +27,33 @@
     <string name="error_server_http">Das Wiki antwortet mit einem Fehler (HTTP %1$d).</string>
     <string name="error_save_failed">Die Adresse konnte nicht gespeichert werden.</string>
 
-    <!-- Platzhalter nach dem Speichern -->
-    <string name="home_title">Wiki verbunden</string>
-    <string name="home_saved_address">Gespeicherte Adresse: %1$s</string>
-    <string name="home_login_pending">Die Anmeldung folgt in einer späteren Version der App.</string>
-    <string name="home_change_server">Andere Adresse eingeben</string>
+    <!-- Anmeldung -->
+    <string name="login_title">Anmelden</string>
+    <string name="login_intro">Die Anmeldung bei %1$s läuft im Browser: Dort meldest du dich mit Passwort und 2FA-Code an und erlaubst der App den Lesezugriff. Die App sieht dein Passwort nicht.</string>
+    <string name="login_submit">Im Browser anmelden</string>
+    <string name="login_reopen">Browser erneut öffnen</string>
+    <string name="login_in_progress">Anmeldung läuft …</string>
+    <string name="login_waiting">Bitte die Anmeldung im Browser abschließen. Danach geht es hier automatisch weiter.</string>
+    <string name="login_change_server">Andere Wiki-Adresse eingeben</string>
+    <string name="login_error_no_browser">Auf diesem Gerät ist kein Browser installiert, der die Anmeldeseite öffnen kann.</string>
+    <string name="login_error_storage">Die Anmeldung konnte auf diesem Gerät nicht sicher gespeichert werden. Bitte erneut versuchen.</string>
+    <string name="login_error_denied">Die Anmeldung wurde im Browser abgelehnt.</string>
+    <string name="login_error_issuer">Die Antwort stammt nicht von diesem Wiki. Die Anmeldung wurde abgebrochen.</string>
+    <string name="login_error_failed">Die Anmeldung ist fehlgeschlagen. Bitte erneut versuchen.</string>
+    <string name="login_error_invalid_grant">Die Anmeldung ist abgelaufen oder wurde schon verwendet. Bitte erneut anmelden.</string>
+    <string name="login_error_server">Das Wiki meldet einen Fehler. Bitte später erneut versuchen.</string>
+    <string name="login_error_invalid_response">Das Wiki hat unerwartet geantwortet. Die Anmeldung wurde abgebrochen.</string>
+
+    <!-- Startbildschirm nach der Anmeldung -->
+    <string name="home_signed_in_as">Angemeldet als %1$s</string>
+    <string name="home_signed_in">Angemeldet</string>
+    <string name="home_logout">Abmelden</string>
+    <string name="home_spaces_title">Spaces</string>
+    <string name="home_spaces_empty">Du hast noch keinen Zugriff auf einen Space.</string>
+    <string name="home_space_key_archived">%1$s · archiviert</string>
+    <string name="home_retry">Erneut versuchen</string>
+    <string name="home_error_unauthorized">Die Anmeldung konnte nicht erneuert werden. Bitte Internetverbindung prüfen und erneut versuchen.</string>
+    <string name="home_error_forbidden">Die App darf diese Daten nicht lesen.</string>
+    <string name="home_error_server">Das Wiki meldet einen Fehler. Bitte später erneut versuchen.</string>
+    <string name="home_error_invalid_response">Das Wiki hat unerwartet geantwortet.</string>
 </resources>

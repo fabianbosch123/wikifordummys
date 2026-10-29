@@ -1,5 +1,6 @@
 package de.wikifordummys.app.server.data
 
+import de.wikifordummys.app.core.net.HttpClients.ensureSizeLimit
 import de.wikifordummys.app.server.model.ServerCheckResult
 import de.wikifordummys.app.server.model.ServerChecker
 import java.io.IOException
@@ -44,6 +45,7 @@ class HealthServerChecker(
     private val client: OkHttpClient = baseClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
+        .ensureSizeLimit()
         .build()
 
     override suspend fun check(baseUrl: String): ServerCheckResult {
