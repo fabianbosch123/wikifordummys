@@ -260,13 +260,13 @@ export class AuthService {
   }
 
   async describeInvitation(token: string, client: ClientInfo) {
-    await this.limiter.enforce([{ key: `invite:ip:${client.ip}`, limit: 30, windowSec: 3600 }]);
+    await this.limiter.enforce([{ key: `invite:ip:${client.ip}`, limit: this.config.RATE_INVITE_PER_HOUR, windowSec: 3600 }]);
     const inv = await this.findOpenInvitation(token);
     return { email: inv.user.email, displayName: inv.user.displayName };
   }
 
   async acceptInvitation(token: string, password: string, displayName: string | undefined, client: ClientInfo) {
-    await this.limiter.enforce([{ key: `invite:ip:${client.ip}`, limit: 30, windowSec: 3600 }]);
+    await this.limiter.enforce([{ key: `invite:ip:${client.ip}`, limit: this.config.RATE_INVITE_PER_HOUR, windowSec: 3600 }]);
     const inv = await this.findOpenInvitation(token);
     this.passwords.assertPolicy(password, inv.user.email);
     const passwordHash = await this.passwords.hash(password);
