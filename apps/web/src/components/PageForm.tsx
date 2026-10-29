@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { resolveUploads, UploadStore } from '@/components/editor/uploads';
 import { Alert } from '@/components/ui';
 import { ApiError, errorMessage } from '@/lib/api';
+import { useHotkeys, withHotkey } from '@/lib/hotkeys';
 
 // Der Editor läuft nur im Browser
 const WikiEditor = dynamic(() => import('@/components/editor/Editor').then((m) => m.WikiEditor), {
@@ -69,22 +70,20 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
     }
   }
 
+  // Auch im Editor und im Titelfeld; unterdrückt „Seite speichern unter“ des Browsers
+  useHotkeys({
+    savePage: () => {
+      if (!busy) void save();
+    },
+  });
+
   function submit(e: FormEvent) {
     e.preventDefault();
     void save();
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="page-form"
-      onKeyDown={(e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-          e.preventDefault();
-          void save();
-        }
-      }}
-    >
+    <form onSubmit={submit} className="page-form">
       <div className="field">
         <label htmlFor="page-title">Titel</label>
         <input
@@ -130,7 +129,7 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
       )}
       <Alert>{error}</Alert>
       <div className="row">
-        <button type="submit" disabled={busy || uploading > 0}>
+        <button type="submit" disabled={busy || uploading > 0} title={withHotkey(submitLabel, 'savePage')}>
           {submitLabel}
         </button>
         <button

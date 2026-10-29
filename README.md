@@ -59,6 +59,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 - **Drag & Drop und Zwischenablage:** Bilder und Dateien lassen sich in den Text ziehen oder einfügen. Bilder erscheinen als Bild, andere Dateien als Link auf den Anhang; bei neuen Seiten wird beim Anlegen hochgeladen.
 - **Versionen:** Jede Speicherung ist eine unveränderliche Version. Verlauf mit zeilenweisem Vergleich zweier Versionen; alte Versionen lassen sich ansehen und als neue Version wiederherstellen.
 - **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.
+- **Tastenkürzel:** `E` öffnet die angezeigte Seite im Editor (nur mit Bearbeitungsrecht, nicht während der Fokus in einem Eingabefeld liegt), `Strg+S` (macOS `Cmd+S`) speichert im Editor, auch aus dem Text oder dem Titelfeld heraus. Die Kürzel stehen zentral in `apps/web/src/lib/hotkeys.ts`; neue werden dort eingetragen und auf der jeweiligen Seite mit `useHotkeys` belegt.
 - **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt.
 
 ## Rechte und Suche
