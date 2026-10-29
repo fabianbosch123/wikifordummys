@@ -1,0 +1,69 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+
+interface HotkeyDef {
+  /** Taste wie in KeyboardEvent.key, klein geschrieben */
+  key: string;
+  /** Mit Strg (unter macOS Cmd) */
+  mod?: boolean;
+  /** Auch auslösen, wenn der Fokus in einem Eingabefeld oder im Editor liegt */
+  inInputs?: boolean;
+  /** Anzeige im Tooltip und in der Doku */
+  label: string;
+  description: string;
+}
+
+/** Zentrale Liste aller Tastenkürzel; neue hier eintragen und auf der jeweiligen Seite mit useHotkeys belegen */
+export const HOTKEYS = {
+  editPage: { key: 'e', label: 'E', description: 'Seite bearbeiten' },
+  savePage: { key: 's', mod: true, inInputs: true, label: 'Strg+S', description: 'Seite speichern' },
+} satisfies Record<string, HotkeyDef>;
+
+export type HotkeyId = keyof typeof HOTKEYS;
+
+/** Eingabefelder, Auswahllisten und alles Editierbare (TipTap) bekommen ihre Tasten selbst */
+function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null;
+}
+
+function matches(def: HotkeyDef, e: KeyboardEvent): boolean {
+  if (e.isComposing || e.key.toLowerCase() !== def.key) return false;
+  // Alt bleibt frei (AltGr meldet unter Windows Strg+Alt), Umschalt ebenfalls
+  if (e.altKey || e.shiftKey) return false;
+  const mod = e.ctrlKey || e.metaKey;
+  if (def.mod ? !mod : mod) return false;
+  if (!def.inInputs && isEditable(e.target)) return false;
+  return true;
+}
+
+/**
+ * Belegt Tastenkürzel, solange die Komponente angezeigt wird. Ein fehlender Handler (undefined) schaltet das Kürzel
+ * ab, etwa wenn der Benutzer die Seite nicht bearbeiten darf.
+ */
+export function useHotkeys(handlers: Partial<Record<HotkeyId, (() => void) | undefined>>) {
+  const current = useRef(handlers);
+  current.current = handlers;
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented) return;
+      for (const [id, def] of Object.entries(HOTKEYS) as [HotkeyId, HotkeyDef][]) {
+        const handler = current.current[id];
+        if (!handler || !matches(def, e)) continue;
+        e.preventDefault();
+        if (!e.repeat) handler();
+        return;
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+}
+
+/** Text für title-Attribute, z. B. „Bearbeiten (E)“ */
+export function withHotkey(text: string, id: HotkeyId): string {
+  return `${text} (${HOTKEYS[id].label})`;
+}

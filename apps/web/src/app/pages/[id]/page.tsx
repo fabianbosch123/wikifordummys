@@ -13,6 +13,7 @@ import { Alert, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
+import { useHotkeys, withHotkey } from '@/lib/hotkeys';
 import { flattenTree } from '@/lib/tree';
 
 /** Verschieben ohne Drag-and-drop: neue Elternseite auswählen, die Seite wird dort angehängt */
@@ -72,6 +73,7 @@ function PageView() {
   const [restricting, setRestricting] = useState(false);
   const [treeVersion, setTreeVersion] = useState(0);
   const [error, setError] = useState('');
+  useHotkeys({ editPage: page.data?.canEdit ? () => router.push(`/pages/${id}/edit`) : undefined });
 
   async function remove(p: PageDto) {
     if (!window.confirm(`„${p.title}“ samt Unterseiten in den Papierkorb verschieben?`)) return;
@@ -96,7 +98,7 @@ function PageView() {
             <h1>{p.title}</h1>
             <div className="row">
               {p.canEdit && (
-                <Link className="button small" href={`/pages/${p.id}/edit`}>
+                <Link className="button small" href={`/pages/${p.id}/edit`} title={withHotkey('Seite bearbeiten', 'editPage')}>
                   Bearbeiten
                 </Link>
               )}
