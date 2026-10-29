@@ -2,12 +2,38 @@
 
 import type { TreeNodeDto } from '@wiki/shared';
 import Link from 'next/link';
-import { DragEvent, useEffect, useMemo, useState } from 'react';
+import { DragEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { prefetchApiData } from '@/lib/data';
 
 type DropZone = 'before' | 'inside' | 'after';
 
+/** Höchstzahl gemerkter aufgeklappter Seiten je Space */
+const MAX_STORED = 500;
+
+/** Aufgeklappte Seiten aus dem Sitzungsspeicher, null wenn für diesen Space noch nichts gemerkt ist */
+function loadExpanded(key: string): string[] | null {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((id): id is string => typeof id === 'string').slice(0, MAX_STORED);
+  } catch {
+    // Speicher gesperrt oder Inhalt kaputt: wie beim ersten Besuch
+    return null;
+  }
+}
+
+function saveExpanded(key: string, ids: Set<string>) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify([...ids].slice(0, MAX_STORED)));
+  } catch {
+    // nicht merkbar, gilt dann nur für diese Ansicht
+  }
+}
+
 interface Props {
+  spaceKey: string;
   nodes: TreeNodeDto[];
   currentId?: string;
   homePageId?: string | null;
@@ -18,8 +44,11 @@ interface Props {
 /**
  * Seitenbaum eines Spaces. Mit Bearbeitungsrecht lassen sich Seiten per Drag-and-drop verschieben:
  * oberes/unteres Viertel einer Zeile = davor/dahinter einsortieren, Mitte = als Unterseite anhängen.
+ * Ein Klick auf eine Seite öffnet sie und klappt ihre Unterseiten auf bzw. zu. Welche Seiten
+ * aufgeklappt sind, wird pro Space für die Browsersitzung gemerkt, weil der Baum bei jedem
+ * Seitenwechsel neu aufgebaut wird.
  */
-export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Props) {
+export function PageTree({ spaceKey, nodes, currentId, homePageId, canEdit, onMove }: Props) {
   const children = useMemo(() => {
     const map = new Map<string | null, TreeNodeDto[]>();
     for (const n of nodes) map.set(n.parentId, [...(map.get(n.parentId) ?? []), n]);
@@ -31,12 +60,19 @@ export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Prop
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; zone: DropZone } | null>(null);
+  const storageKey = `wiki.tree.expanded.${spaceKey}`;
+  const restored = useRef(false);
+  const [ready, setReady] = useState(false);
 
-  // Vorfahren der aktuellen Seite und die Startseite aufklappen
+  // Gemerkten Zustand übernehmen (beim ersten Besuch die Startseite) und die Vorfahren der aktuellen Seite aufklappen
   useEffect(() => {
+    const first = !restored.current;
+    restored.current = true;
+    const stored = first ? loadExpanded(storageKey) : null;
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (homePageId) next.add(homePageId);
+      if (stored) for (const id of stored) next.add(id);
+      else if (first && homePageId) next.add(homePageId);
       let cursor = currentId ? byId.get(currentId)?.parentId : null;
       while (cursor) {
         next.add(cursor);
@@ -44,7 +80,23 @@ export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Prop
       }
       return next;
     });
-  }, [currentId, homePageId, byId]);
+    setReady(true);
+  }, [currentId, homePageId, byId, storageKey]);
+
+  useEffect(() => {
+    if (ready) saveExpanded(storageKey, expanded);
+  }, [ready, expanded, storageKey]);
+
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Nur ein normaler Klick klappt um, nicht Strg-/Mittelklick zum Öffnen in einem neuen Tab
+  const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
   const isDescendant = (id: string, ancestorId: string) => {
     let cursor: string | null | undefined = id;
@@ -123,14 +175,7 @@ export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Prop
                     type="button"
                     className="twisty"
                     aria-label={open ? `${node.title} zuklappen` : `${node.title} aufklappen`}
-                    onClick={() =>
-                      setExpanded((prev) => {
-                        const next = new Set(prev);
-                        if (open) next.delete(node.id);
-                        else next.add(node.id);
-                        return next;
-                      })
-                    }
+                    onClick={() => toggle(node.id)}
                   >
                     {open ? '▾' : '▸'}
                   </button>
@@ -140,6 +185,9 @@ export function PageTree({ nodes, currentId, homePageId, canEdit, onMove }: Prop
                 <Link
                   href={`/pages/${node.id}`}
                   aria-current={node.id === currentId ? 'page' : undefined}
+                  onClick={(e) => {
+                    if (hasChildren && plainClick(e)) toggle(node.id);
+                  }}
                   onMouseEnter={() => prefetchApiData(`/pages/${node.id}`)}
                   onFocus={() => prefetchApiData(`/pages/${node.id}`)}
                 >
