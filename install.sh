@@ -500,8 +500,8 @@ summary() {
   if ((ADMIN_CREATE)); then info "  Administrator:  $ADMIN_NAME <$ADMIN_EMAIL>"; fi
   if [[ $WIKI_OFFICE == true ]]; then info "  Office-Editor:  an (https://$WIKI_DOMAIN/office/)"; else info "  Office-Editor:  aus"; fi
   if [[ $WIKI_DRAWIO == true ]]; then info "  draw.io:        an (https://$WIKI_DOMAIN/draw/)"; else info "  draw.io:        aus"; fi
-  if [[ -n $BACKUP_REPOSITORY ]]; then info "  Sicherung:      $BACKUP_REPOSITORY"; else info "  Sicherung:      aus"; fi
-  if [[ -n $MONITOR_PING_URL ]]; then info "  Überwachung:    $MONITOR_PING_URL"; fi
+  if [[ -n $BACKUP_REPOSITORY ]]; then info "  Sicherung:      $(mask_url "$BACKUP_REPOSITORY")"; else info "  Sicherung:      aus"; fi
+  if [[ -n $MONITOR_PING_URL ]]; then info "  Überwachung:    $(url_host "$MONITOR_PING_URL")"; fi
   if ((!NONINTERACTIVE)); then
     echo
     ask_yes CONFIRM "Konfiguration schreiben und fortfahren?" j

@@ -247,10 +247,26 @@ docker_cleanup() {
   docker image prune -f >/dev/null 2>&1 || true
 }
 
+# Adresse ohne Zugangsdaten für Ausgaben und Journal: benutzer:passwort@ wird zu ***@
+mask_url() {
+  if [[ $1 =~ ^(.*://)[^/@]+@(.*)$ ]]; then
+    printf '%s***@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Nur Schema und Host einer Adresse; bei Push-Adressen ist der Pfad selbst das Token
+url_host() {
+  local rest=${1#*://} host
+  host=${rest%%/*}
+  printf '%s://%s' "${1%%://*}" "${host##*@}"
+}
+
 # Ruft eine Push-Adresse der Überwachung auf (Fehler werden ignoriert)
 ping_url() {
   [[ -n $1 ]] || return 0
-  curl -fsS -m 10 --retry 3 -o /dev/null "$1" || warn "Push-Adresse $1 nicht erreichbar."
+  curl -fsS -m 10 --retry 3 -o /dev/null "$1" || warn "Push-Adresse bei $(url_host "$1") nicht erreichbar."
 }
 
 # restic mit der Konfiguration aus .env
