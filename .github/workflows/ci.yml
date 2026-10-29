@@ -283,6 +283,8 @@ jobs:
           sudo wikictl import /var/tmp/umzug.wiki.gpg --passphrase-file /root/umzug.pass --yes 2>&1 | tee import.txt
           grep -q "Umzug abgeschlossen" import.txt
           grep -q "Neue Domain (wiki.localtest → neu.localtest)" import.txt
+          # Gleiche Images wie auf dem alten Server: keine Warnung
+          if grep -q "Image für" import.txt; then exit 1; fi
           # Gleicher Inhalt und gleiche Anhänge, Schlüssel vom alten Server, Domain und Sicherung vom neuen
           fingerprint >nachher.txt
           diff vorher.txt nachher.txt

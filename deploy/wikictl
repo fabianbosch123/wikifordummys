@@ -880,15 +880,15 @@ cmd_import() {
     die "Der alte Server lief mit Stand ${commit:0:12}, dieser mit ${here:0:12}. Zuerst angleichen: sudo wikictl update $commit, dann den Import wiederholen."
   fi
   ok "Gleicher Stand: ${here:0:12}."
-  local line service ref cur
+  local line service ref images
+  # Fremde Images stehen mit Digest in docker-compose.yml; eigene werden gebaut und haben daher eine andere ID
+  images=$(compose config --images 2>/dev/null || true)
   while IFS= read -r line; do
     [[ $line == image.* ]] || continue
     service=${line%%=*} service=${service#image.}
     read -r ref _ <<<"${line#*=}"
-    # Fremde Images stehen mit Digest in docker-compose.yml; eigene werden gebaut und haben daher eine andere ID
     [[ $ref == *@sha256:* ]] || continue
-    cur=$(compose config --images "$service" 2>/dev/null || true)
-    [[ -z $cur || $cur == "$ref" ]] || warn "Image für $service weicht ab: alt $ref, neu $cur"
+    grep -Fxq -- "$ref" <<<"$images" || warn "Image für $service weicht ab: auf dem alten Server $ref, hier nicht in docker-compose.yml"
   done <"$manifest"
 
   local old_domain new_domain old_tls new_tls current
