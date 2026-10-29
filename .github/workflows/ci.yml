@@ -102,8 +102,9 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.trivyignore:/.trivyignore:ro" aquasec/trivy:0.65.0 \
             image --severity CRITICAL --ignore-unfixed --ignorefile /.trivyignore --exit-code 1 --no-progress wikifordummys-${{ matrix.app }}:ci
 
-  # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung
-  # und in der Betriebsart internal ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
+  # M4: Installer ohne Rückfragen auf einem frischen Ubuntu, danach Sicherung, Test-Wiederherstellung,
+  # in der Betriebsart proxy ein Umzug (export, Neuinstallation, import) und in der Betriebsart internal
+  # ein OWASP-ZAP-Baseline-Scan gegen die laufende Instanz.
   # In der Betriebsart internal laufen zusätzlich der Office-Editor (echtes Euro-Office-Image) und draw.io.
   install:
     runs-on: ubuntu-24.04
@@ -219,6 +220,73 @@ jobs:
           test -z "$(sudo docker compose --profile drawio ps -q drawio)"
           # Aufräumen lässt laufende Dienste und Volumes in Ruhe
           sudo wikictl cleanup
+          sudo wikictl monitor
+      # Umzug auf einen "neuen Server": Export mit Testinhalt und Anhang, Volumes und .env löschen, frisch installieren
+      # unter neuer Domain, Import, dann Inhalt, Anhänge und Schlüssel mit dem alten Stand vergleichen (docs/umzug.md)
+      - name: Umzug mit wikictl export und import
+        if: matrix.mode == 'proxy'
+        env:
+          PASS: ci-umzug-passwort-0123456789
+        run: |
+          key=ci$(openssl rand -hex 16)
+          printf 'Anhang für den Umzugstest\n' >anhang.txt
+          sum=$(sha256sum anhang.txt | cut -d' ' -f1)
+          sudo docker compose exec -T api sh -c "mkdir -p /var/lib/wiki/attachments/${key:0:2} && cat >/var/lib/wiki/attachments/${key:0:2}/$key" <anhang.txt
+          sudo docker compose exec -T db psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <<SQL
+          INSERT INTO spaces (id, key, name, updated_at) VALUES ('00000000-0000-4000-8000-000000000001', 'UMZUG', 'Umzug', now());
+          INSERT INTO pages (id, space_id, path, position, title, content, content_text, updated_at)
+            VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001',
+              '/00000000-0000-4000-8000-000000000002/', 0, 'Umzugstest', '{"type":"doc","content":[]}', 'Umzugstest', now());
+          INSERT INTO attachments (id, page_id, filename, mime_type, size_bytes, storage_key, sha256)
+            VALUES ('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000002', 'anhang.txt', 'text/plain',
+              $(stat -c %s anhang.txt), '$key', '$sum');
+          SQL
+          fingerprint() {
+            sudo docker compose exec -T db psql -At -U wiki -d wiki -c "SELECT md5(string_agg(t, '|' ORDER BY t)) FROM (
+              SELECT id || email || coalesce(password_hash, '') AS t FROM users UNION ALL SELECT id || key || name FROM spaces
+              UNION ALL SELECT id || title || content::text FROM pages UNION ALL SELECT storage_key || sha256 FROM attachments) x"
+            vol=$(sudo docker volume inspect -f '{{ .Mountpoint }}' wikifordummys_attachments)
+            sudo sh -c "cd '$vol' && find . -type f -print0 | sort -z | xargs -0 sha256sum"
+          }
+          fingerprint >vorher.txt
+          old_key=$(sudo grep '^ENCRYPTION_KEY=' .env)
+
+          sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl export --output /var/tmp/umzug.wiki.gpg --stop
+          test "$(sudo stat -c %a /var/tmp/umzug.wiki.gpg)" = 600
+          # Verschlüsselt: weder Schlüssel noch Anhang im Klartext; mit --stop läuft auf dem alten Server nichts mehr
+          if sudo grep -qF "$(echo "$old_key" | cut -d"'" -f2)" /var/tmp/umzug.wiki.gpg; then exit 1; fi
+          if sudo grep -qF 'Anhang für den Umzugstest' /var/tmp/umzug.wiki.gpg; then exit 1; fi
+          test -z "$(sudo docker compose ps -q --status running)"
+
+          # Neuer Server: keine Volumes, keine .env, andere Domain, kein Administrator
+          sudo docker compose --profile office --profile drawio down -v
+          sudo rm -f .env .env.bak
+          sudo WIKI_TLS=proxy WIKI_DOMAIN=neu.localtest PROXY_SAME_HOST=j SMTP_ENABLE=n ADMIN_CREATE=n OFFICE_ENABLE=n DRAWIO_ENABLE=n \
+            BACKUP_ENABLE=j BACKUP_KIND=local BACKUP_REPOSITORY=/var/backups/wiki-restic-neu \
+            INSTALL_UNATTENDED=n INSTALL_UFW=n INSTALL_FAIL2BAN=n ./install.sh --non-interactive
+          test "$(sudo grep '^ENCRYPTION_KEY=' .env)" != "$old_key"
+
+          # Falsches Passwort und veränderte Datei werden abgelehnt, ohne etwas zu ändern
+          if sudo WIKI_EXPORT_PASSPHRASE=falsches-passwort-0123456789 wikictl import /var/tmp/umzug.wiki.gpg --yes; then exit 1; fi
+          sudo cp /var/tmp/umzug.wiki.gpg /var/tmp/kaputt.wiki.gpg
+          printf 'x' | sudo dd of=/var/tmp/kaputt.wiki.gpg bs=1 seek=4000 conv=notrunc status=none
+          if sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl import /var/tmp/kaputt.wiki.gpg --yes; then exit 1; fi
+          sudo grep -q "^WIKI_DOMAIN='neu.localtest'" .env
+
+          sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl import /var/tmp/umzug.wiki.gpg --yes 2>&1 | tee import.txt
+          grep -q "Umzug abgeschlossen" import.txt
+          grep -q "Neue Domain (wiki.localtest → neu.localtest)" import.txt
+          # Gleicher Inhalt und gleiche Anhänge, Schlüssel vom alten Server, Domain und Sicherung vom neuen
+          fingerprint >nachher.txt
+          diff vorher.txt nachher.txt
+          test "$(sudo grep '^ENCRYPTION_KEY=' .env)" = "$old_key"
+          sudo grep -q "^WIKI_DOMAIN='neu.localtest'" .env
+          sudo grep -q "^BACKUP_REPOSITORY='/var/backups/wiki-restic-neu'" .env
+          curl -fsS -H 'Host: neu.localtest' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8080/api/v1/health
+          # Der Administrator vom alten Server ist da; Sicherung und Test-Wiederherstellung auf dem neuen Server
+          sudo wikictl reset-password --email admin@example.com
+          sudo wikictl backup
+          sudo wikictl restore-test
           sudo wikictl monitor
       - name: OWASP ZAP Baseline-Scan
         if: matrix.mode == 'internal'

@@ -569,7 +569,7 @@ preflight() {
 install_packages() {
   step "Pakete installieren"
   export DEBIAN_FRONTEND=noninteractive
-  local pkgs=(ca-certificates curl openssl git)
+  local pkgs=(ca-certificates curl openssl git gnupg)
   if [[ -n $BACKUP_REPOSITORY ]]; then pkgs+=(restic); fi
   if ((INSTALL_UNATTENDED)); then pkgs+=(unattended-upgrades); fi
   if ((INSTALL_UFW)); then pkgs+=(ufw); fi
