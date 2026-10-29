@@ -846,7 +846,8 @@ cmd_import() {
   # Ohne Verschlüsselung (z. B. gpg --store) gäbe gpg den Inhalt mit jedem Passwort aus: nur symmetrisch verschlüsselte,
   # mit dem Passwort entschlüsselte und unveränderte Dateien annehmen
   if ! grep -q '^\[GNUPG:\] NEED_PASSPHRASE_SYM ' "$status" || ! grep -q '^\[GNUPG:\] DECRYPTION_OKAY' "$status" ||
-    ! grep -q '^\[GNUPG:\] GOODMDC' "$status" || grep -q '^\[GNUPG:\] DECRYPTION_FAILED' "$status"; then
+    ! grep -q '^\[GNUPG:\] GOODMDC' "$status" || grep -q '^\[GNUPG:\] DECRYPTION_FAILED' "$status" ||
+    (($(grep -c '^\[GNUPG:\] PLAINTEXT ' "$status") != 1)); then
     die "Die Datei ist nicht mit dem Passwort verschlüsselt oder nicht unverändert; das ist keine Umzugsdatei von wikictl export."
   fi
   local entry

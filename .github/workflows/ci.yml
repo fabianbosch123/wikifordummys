@@ -275,6 +275,9 @@ jobs:
           sudo sh -c 'gpg --batch --quiet --pinentry-mode loopback --passphrase-file /root/umzug.pass --decrypt /var/tmp/umzug.wiki.gpg |
             gpg --batch --yes --store -o /var/tmp/ohne.wiki.gpg'
           if sudo wikictl import /var/tmp/ohne.wiki.gpg --passphrase-file /root/falsch.pass --yes; then exit 1; fi
+          # Auch nicht vor eine echte Umzugsdatei gehängt
+          sudo sh -c 'cat /var/tmp/ohne.wiki.gpg /var/tmp/umzug.wiki.gpg >/var/tmp/doppelt.wiki.gpg'
+          if sudo wikictl import /var/tmp/doppelt.wiki.gpg --passphrase-file /root/umzug.pass --yes; then exit 1; fi
           sudo grep -q "^WIKI_DOMAIN='neu.localtest'" .env
 
           sudo wikictl import /var/tmp/umzug.wiki.gpg --passphrase-file /root/umzug.pass --yes 2>&1 | tee import.txt
