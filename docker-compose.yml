@@ -119,8 +119,12 @@ services:
       # Standard sind 60 s; startet RabbitMQ im Container langsamer (erster Start, volle oder langsame Platte),
       # läuft der Dokumentdienst ohne Warteschlange und der Editor antwortet bis zum Neustart mit HTTP 502
       AMQP_START_TIMEOUT: "300"
+      # Schriftliste beim Start neu aufbauen, damit die freien Schriften aus fonts/ im Editor erscheinen
+      GENERATE_FONTS: "true"
     volumes:
       - office_data:/var/www/euro-office/Data
+      # Freie Ersatzschriften (SIL OFL bzw. Bitstream-Vera-Lizenz, siehe docs/schriftarten.md), nur lesend
+      - ./fonts:/usr/share/fonts/truetype/custom:ro
     healthcheck:
       # Im Image gibt es kein curl; bash spricht HTTP direkt über /dev/tcp (mit Host-Kopfzeile für nginx)
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/80 && printf 'GET /healthcheck HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && timeout 5 cat <&3 | grep -q true"]

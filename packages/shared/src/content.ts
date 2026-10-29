@@ -19,6 +19,29 @@ export interface DocNode {
 export const CALLOUT_VARIANTS = ['info', 'warning', 'success', 'note'] as const;
 export type CalloutVariant = (typeof CALLOUT_VARIANTS)[number];
 
+/**
+ * Schriftarten im Editor (gespeichert wird nur die Kennung). Die Weboberfläche nennt zuerst die gewohnte Schrift,
+ * falls sie auf dem Rechner installiert ist, und liefert sonst eine freie Ersatzschrift selbst aus
+ * (apps/web/src/app/fonts.css, Lizenzen in docs/schriftarten.md).
+ */
+export const FONT_FAMILIES = [
+  { id: 'arial', label: 'Arial' },
+  { id: 'helvetica', label: 'Helvetica' },
+  { id: 'times-new-roman', label: 'Times New Roman' },
+  { id: 'calibri', label: 'Calibri' },
+  { id: 'cambria', label: 'Cambria' },
+  { id: 'verdana', label: 'Verdana' },
+  { id: 'tahoma', label: 'Tahoma' },
+  { id: 'georgia', label: 'Georgia' },
+  { id: 'segoe-ui', label: 'Segoe UI' },
+  { id: 'courier-new', label: 'Courier New' },
+] as const;
+export type FontFamilyId = (typeof FONT_FAMILIES)[number]['id'];
+
+export function isFontFamilyId(value: unknown): value is FontFamilyId {
+  return typeof value === 'string' && FONT_FAMILIES.some((f) => f.id === value);
+}
+
 export const CONTENT_LIMITS = {
   maxDepth: 40,
   maxNodes: 50_000,
@@ -165,6 +188,8 @@ const MARKS: Record<string, AttrSanitizer | null> = {
   strike: null,
   underline: null,
   code: null,
+  // Unbekannte Schriftart (z. B. später aus der Liste genommen): die Mark entfällt, der Text bleibt
+  font: (a) => (isFontFamilyId(a.family) ? { family: a.family } : undefined),
   link: (a) => {
     if (!isSafeLinkHref(a.href)) throw new ContentError('Unzulässiges Link-Ziel.');
     return { href: a.href };
@@ -212,13 +237,14 @@ export function sanitizeDoc(input: unknown): DocNode {
       node.text = raw.text;
       if (raw.marks !== undefined) {
         if (!Array.isArray(raw.marks) || raw.marks.length > 10) throw new ContentError('Ungültige Formatierung.');
-        const marks = raw.marks.map((m): DocMark => {
+        const marks = raw.marks.flatMap((m): DocMark[] => {
           if (!isRecord(m) || typeof m.type !== 'string' || !Object.hasOwn(MARKS, m.type)) {
             throw new ContentError('Nicht erlaubte Formatierung.');
           }
           const sanitizeMark = MARKS[m.type];
           const attrs = sanitizeMark ? sanitizeMark(isRecord(m.attrs) ? m.attrs : {}) : undefined;
-          return attrs ? { type: m.type, attrs } : { type: m.type };
+          if (m.type === 'font' && !attrs) return [];
+          return [attrs ? { type: m.type, attrs } : { type: m.type }];
         });
         if (marks.length) node.marks = marks;
       }

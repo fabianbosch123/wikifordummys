@@ -12,6 +12,8 @@ COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile --filter @wiki/web...
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+# Freie Schriften für den Editor (apps/web/src/app/fonts.css bindet sie ein)
+COPY fonts fonts
 # Nur Rückfall: im Betrieb leitet Caddy /api direkt an die API weiter
 ENV API_INTERNAL_URL=http://api:3001
 RUN pnpm --filter @wiki/shared build && pnpm --filter @wiki/web build

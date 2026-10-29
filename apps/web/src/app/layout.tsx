@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { ReactNode } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { AuthProvider } from '@/lib/auth';
+import './fonts.css';
 import './globals.css';
 
 export const metadata: Metadata = {

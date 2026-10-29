@@ -4,7 +4,7 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { COLUMN_WIDTH, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type FeaturesDto, type TreeNodeDto } from '@wiki/shared';
+import { COLUMN_WIDTH, FONT_FAMILIES, IMAGE_SIZE, isFontFamilyId, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type FeaturesDto, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
 import type { EditorView } from '@tiptap/pm/view';
 import { ChangeEvent, ReactNode, useContext, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import { useApiData } from '@/lib/data';
 import { flattenTree } from '@/lib/tree';
 import { Callout } from './callout';
 import { DrawioDialog } from './DrawioDialog';
+import { Font } from './font';
 import { askDrawingTitle, Drawing, DrawingContext } from './drawing';
 import { NewOfficeFile } from './NewOfficeFile';
 import { pendingFile, placeholderNode, type UploadStore } from './uploads';
@@ -44,6 +45,7 @@ export const editorExtensions = [
   }),
   Callout,
   Drawing,
+  Font,
 ];
 
 function ToolButton({
@@ -132,6 +134,7 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
       strike: e.isActive('strike'),
       code: e.isActive('code'),
       link: e.isActive('link'),
+      font: (e.getAttributes('font').family as string | undefined) ?? '',
       h1: e.isActive('heading', { level: 1 }),
       h2: e.isActive('heading', { level: 2 }),
       h3: e.isActive('heading', { level: 3 }),
@@ -232,6 +235,24 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
         <ToolButton label="Code" active={s.code} onClick={() => chain().toggleCode().run()}>
           {'</>'}
         </ToolButton>
+        <select
+          className="tool font-select"
+          title="Schriftart"
+          aria-label="Schriftart"
+          value={s.font}
+          onChange={(e) => {
+            const family = e.target.value;
+            if (isFontFamilyId(family)) chain().setFont(family).run();
+            else chain().unsetFont().run();
+          }}
+        >
+          <option value="">Standardschrift</option>
+          {FONT_FAMILIES.map((f) => (
+            <option key={f.id} value={f.id} data-font={f.id}>
+              {f.label}
+            </option>
+          ))}
+        </select>
         <span className="sep" />
         <ToolButton label="Aufzählung" active={s.bulletList} onClick={() => chain().toggleBulletList().run()}>
           • Liste
