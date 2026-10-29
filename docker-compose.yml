@@ -11,9 +11,12 @@ x-hardened: &hardened
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
 
+# Fremde Images mit fester Version und Digest; Renovate (docker:pinDigests) schlägt Updates als PR vor.
+# wikictl update zieht sie vor dem Neustart (compose pull), sonst bliebe der Stand der Installation stehen.
+
 services:
   caddy:
-    image: caddy:2
+    image: caddy:2.11.7@sha256:5e5286cb37d44086d651a5363f05f43a692ce4d649d88fb1bd844579f45fa9e8
     restart: unless-stopped
     # Betriebsart aus .env: letsencrypt (öffentlich), internal (eigenes Netz) oder proxy (hinter vorhandenem Reverse Proxy)
     command: ["caddy", "run", "--config", "/etc/caddy/${WIKI_TLS:-letsencrypt}.Caddyfile", "--adapter", "caddyfile"]
@@ -152,7 +155,7 @@ services:
     logging: *logging
 
   db:
-    image: postgres:16
+    image: postgres:16.15@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
     restart: unless-stopped
     environment:
       POSTGRES_DB: wiki
@@ -171,7 +174,7 @@ services:
     logging: *logging
 
   redis:
-    image: redis:7
+    image: redis:7.4.12@sha256:b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5
     restart: unless-stopped
     # Passwort über eine Konfigurationsdatei statt als Argument, sonst steht es in ps und docker inspect (SEC-012).
     # docker-entrypoint.sh wechselt danach zum Benutzer redis, der die Datei lesen darf.

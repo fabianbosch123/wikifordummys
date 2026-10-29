@@ -1,6 +1,6 @@
 # Build-Kontext ist das Wurzelverzeichnis des Repositorys:
 #   docker build -f apps/api/Dockerfile .
-FROM node:22-bookworm-slim AS base
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable && apt-get update && apt-get install -y --no-install-recommends openssl fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo

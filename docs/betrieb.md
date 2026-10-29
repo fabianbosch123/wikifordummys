@@ -56,7 +56,7 @@ sudo wikictl update v0.4.0     # bestimmter Tag oder Commit
 
 Das Update sichert zuerst (mit restic, sonst nur die Datenbank nach `/var/backups/wikifordummys/`), holt den Code, baut die Images neu, startet die Container, lädt die Caddy-Konfiguration neu und wartet, bis die API gesund ist. Neue optionale Dienste (bisher: Office-Editor, draw.io) fragt es einmal ab. Vorher prüft es den freien Platz (4 GB, mit Office-Editor 6 GB) und räumt bei Bedarf den Docker-Build-Cache auf; danach entfernt es Build-Cache älter als 24 Stunden und abgelöste Images. Von den Datenbank-Sicherungen in `/var/backups/wikifordummys/` bleiben die letzten fünf. Datenbankmigrationen spielt die API beim Start selbst ein. Schlägt der Start fehl, nennt `wikictl` den vorherigen Stand; mit `sudo wikictl update <alter-commit>` geht es zurück (bei Migrationen zusätzlich `wikictl restore`).
 
-Ubuntu-Sicherheitsupdates laufen automatisch (unattended-upgrades), sofern im Installer gewählt. Docker-Basis-Images werden bei `wikictl update` mit `--pull` aktualisiert.
+Ubuntu-Sicherheitsupdates laufen automatisch (unattended-upgrades), sofern im Installer gewählt. Alle Docker-Images stehen mit fester Version und Digest im Repository (`docker-compose.yml`, Dockerfiles); Renovate schlägt neue Versionen als Pull Request vor. `wikictl update` zieht danach die fertigen Images (Caddy, Postgres, Redis, Office-Editor) und baut die eigenen mit `--pull` neu. Eine neue Euro-Office-Version lässt sich mit `OFFICE_VERSION` in `.env` setzen.
 
 ## Sicherung
 

@@ -73,9 +73,15 @@ handle @oauthMeta {
 	reverse_proxy api:3001
 }
 
-# Office-Editor (Dienst office, optional): Beispiel-App, Infoseite und Verwaltung des Editor-Servers bleiben gesperrt
+# Office-Editor (Dienst office, optional): Beispiel-App, Infoseite und Verwaltung des Editor-Servers bleiben gesperrt,
+# ebenso die Document-Builder-API (vom Wiki nicht genutzt; ONLYOFFICE vor 10.0 mit CVE-2026-110385).
+# Der Editor-Server nimmt sie auch hinter einem Versionspräfix (/office/9.3.6-abc/docbuilder) und ohne Groß-/Kleinschreibung an.
 @officeBlocked path /office/example* /office/info* /office/admin*
 handle @officeBlocked {
+	respond 404
+}
+@officeBuilder path_regexp (?i)^/office/([^/]+/)?docbuilder
+handle @officeBuilder {
 	respond 404
 }
 

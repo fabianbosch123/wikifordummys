@@ -171,6 +171,8 @@ cmd_update_apply() {
   if [[ -z $(env_get WIKI_DRAWIO) ]]; then offer_drawio; fi
   ipv6_setup
   step "Bauen und neu starten"
+  # Images ohne eigenen Bau (Caddy, Datenbank, Redis, Office) zieht compose up nur, wenn sie fehlen
+  compose pull --ignore-buildable --quiet
   compose build --pull
   if [[ $(env_get WIKI_OFFICE) != true ]]; then
     compose --profile office rm -sf office >/dev/null 2>&1 || true
@@ -517,6 +519,11 @@ cmd_restore_test() {
   die "Test-Wiederherstellung fehlgeschlagen."
 }
 
+# Dasselbe Postgres-Image wie der Dienst db, damit der Test nicht ein zweites, ungepflegtes Image zieht
+db_image() {
+  compose config --images db
+}
+
 restore_test_run() {
   (
     set -Eeuo pipefail
@@ -530,7 +537,7 @@ restore_test_run() {
     restore_to_dir latest "$tmp"
     step "Datenbank in einen Wegwerf-Container einspielen"
     docker run -d --name "$name" --network none --tmpfs /var/lib/postgresql/data \
-      -e POSTGRES_USER=wiki -e POSTGRES_DB=wiki -e POSTGRES_PASSWORD=test postgres:16 >/dev/null
+      -e POSTGRES_USER=wiki -e POSTGRES_DB=wiki -e POSTGRES_PASSWORD=test "$(db_image)" >/dev/null
     local i
     for i in $(seq 1 60); do
       docker exec "$name" pg_isready -U wiki -d wiki >/dev/null 2>&1 && break

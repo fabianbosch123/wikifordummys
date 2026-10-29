@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
         env:
           POSTGRES_USER: wiki
           POSTGRES_PASSWORD: wiki
@@ -22,7 +22,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U wiki" --health-interval 5s --health-timeout 3s --health-retries 20
       redis:
-        image: redis:7
+        image: redis:7.4.12@sha256:b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
