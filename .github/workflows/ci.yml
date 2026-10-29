@@ -225,10 +225,10 @@ jobs:
       # unter neuer Domain, Import, dann Inhalt, Anhänge und Schlüssel mit dem alten Stand vergleichen (docs/umzug.md)
       - name: Umzug mit wikictl export und import
         if: matrix.mode == 'proxy'
-        env:
-          PASS: ci-umzug-passwort-0123456789
         run: |
-          key=ci$(openssl rand -hex 16)
+          # Passwort über eine Datei, nur für root lesbar (nicht in der Kommandozeile)
+          sudo sh -c "umask 077; echo ci-umzug-passwort-0123456789 >/root/umzug.pass; echo falsches-passwort-0123456789 >/root/falsch.pass"
+          key=$(cat /proc/sys/kernel/random/uuid)
           printf 'Anhang für den Umzugstest\n' >anhang.txt
           sum=$(sha256sum anhang.txt | cut -d' ' -f1)
           sudo docker compose exec -T api sh -c "mkdir -p /var/lib/wiki/attachments/${key:0:2} && cat >/var/lib/wiki/attachments/${key:0:2}/$key" <anhang.txt
@@ -251,7 +251,7 @@ jobs:
           fingerprint >vorher.txt
           old_key=$(sudo grep '^ENCRYPTION_KEY=' .env)
 
-          sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl export --output /var/tmp/umzug.wiki.gpg --stop
+          sudo wikictl export --output /var/tmp/umzug.wiki.gpg --passphrase-file /root/umzug.pass --stop
           test "$(sudo stat -c %a /var/tmp/umzug.wiki.gpg)" = 600
           # Verschlüsselt: weder Schlüssel noch Anhang im Klartext; mit --stop läuft auf dem alten Server nichts mehr
           if sudo grep -qF "$(echo "$old_key" | cut -d"'" -f2)" /var/tmp/umzug.wiki.gpg; then exit 1; fi
@@ -267,18 +267,28 @@ jobs:
           test "$(sudo grep '^ENCRYPTION_KEY=' .env)" != "$old_key"
 
           # Falsches Passwort und veränderte Datei werden abgelehnt, ohne etwas zu ändern
-          if sudo WIKI_EXPORT_PASSPHRASE=falsches-passwort-0123456789 wikictl import /var/tmp/umzug.wiki.gpg --yes; then exit 1; fi
+          if sudo wikictl import /var/tmp/umzug.wiki.gpg --passphrase-file /root/falsch.pass --yes; then exit 1; fi
           sudo cp /var/tmp/umzug.wiki.gpg /var/tmp/kaputt.wiki.gpg
           printf 'x' | sudo dd of=/var/tmp/kaputt.wiki.gpg bs=1 seek=4000 conv=notrunc status=none
-          if sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl import /var/tmp/kaputt.wiki.gpg --yes; then exit 1; fi
+          if sudo wikictl import /var/tmp/kaputt.wiki.gpg --passphrase-file /root/umzug.pass --yes; then exit 1; fi
+          # Unverschlüsselt verpackt (gpg --store) gibt gpg den Inhalt mit jedem Passwort aus; der Import muss ablehnen
+          sudo sh -c 'gpg --batch --quiet --pinentry-mode loopback --passphrase-file /root/umzug.pass --decrypt /var/tmp/umzug.wiki.gpg |
+            gpg --batch --yes --store -o /var/tmp/ohne.wiki.gpg'
+          if sudo wikictl import /var/tmp/ohne.wiki.gpg --passphrase-file /root/falsch.pass --yes; then exit 1; fi
           sudo grep -q "^WIKI_DOMAIN='neu.localtest'" .env
 
-          sudo WIKI_EXPORT_PASSPHRASE="$PASS" wikictl import /var/tmp/umzug.wiki.gpg --yes 2>&1 | tee import.txt
+          sudo wikictl import /var/tmp/umzug.wiki.gpg --passphrase-file /root/umzug.pass --yes 2>&1 | tee import.txt
           grep -q "Umzug abgeschlossen" import.txt
           grep -q "Neue Domain (wiki.localtest → neu.localtest)" import.txt
           # Gleicher Inhalt und gleiche Anhänge, Schlüssel vom alten Server, Domain und Sicherung vom neuen
           fingerprint >nachher.txt
           diff vorher.txt nachher.txt
+          # Die Umzugsdatei trägt nur die übernommenen Einstellungen, keine Zugänge der alten Sicherung
+          sudo sh -c 'gpg --batch --quiet --pinentry-mode loopback --passphrase-file /root/umzug.pass --decrypt /var/tmp/umzug.wiki.gpg |
+            tar -xOf - staging/env' >umzug-env.txt
+          grep -q '^ENCRYPTION_KEY=' umzug-env.txt
+          if grep -Eq '^(BACKUP_|DB_PASSWORD|REDIS_PASSWORD|WIKI_DOMAIN)' umzug-env.txt; then exit 1; fi
+          rm -f umzug-env.txt
           test "$(sudo grep '^ENCRYPTION_KEY=' .env)" = "$old_key"
           sudo grep -q "^WIKI_DOMAIN='neu.localtest'" .env
           sudo grep -q "^BACKUP_REPOSITORY='/var/backups/wiki-restic-neu'" .env

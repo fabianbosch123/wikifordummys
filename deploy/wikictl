@@ -47,10 +47,11 @@ Sicherung (restic, Ziel aus .env)
   backup-init             Sicherungsziel anlegen bzw. prüfen
 
 Umzug auf einen anderen Server (docs/umzug.md)
-  export [--output <datei>] [--stop]
+  export [--output <datei>] [--passphrase-file <datei>] [--stop]
                           alles in eine verschlüsselte Datei packen (Wiki dabei kurz angehalten);
                           --stop lässt den alten Server danach aus
-  import <datei> [--yes]  Umzugsdatei auf einem frisch installierten Server einspielen und prüfen
+  import <datei> [--passphrase-file <datei>] [--yes]
+                          Umzugsdatei auf einem frisch installierten Server einspielen und prüfen
 
 Sonstiges
   ca-cert                 Stammzertifikat der internen Zertifizierungsstelle ausgeben (Betriebsart internal)
@@ -543,8 +544,14 @@ attachment_check() {
   local dir=$1 broken=0 key sum file
   while IFS='|' read -r key sum; do
     [[ -z $key ]] && continue
+    # Schlüssel wie in der API (attachment-storage.service.ts) und keine Verknüpfungen: root liest nur im Verzeichnis
+    if [[ ! $key =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+      broken=$((broken + 1))
+      warn "Ungültiger Ablageschlüssel in der Datenbank: $(printf '%q' "$key")"
+      continue
+    fi
     file=$dir/${key:0:2}/$key
-    if [[ ! -f $file ]]; then
+    if [[ -L $file || ! -f $file ]]; then
       broken=$((broken + 1))
       warn "Anhang fehlt: $key"
     elif [[ $(sha256sum "$file" | cut -d' ' -f1) != "$sum" ]]; then
@@ -606,20 +613,26 @@ MIGRATE_FORMAT=1
 MIGRATE_KEYS=(ENCRYPTION_KEY SESSION_SECRET SMTP_URL MAIL_FROM WIKI_OFFICE WIKI_DRAWIO OFFICE_VERSION ATTACHMENT_MAX_MB
   ATTACHMENT_MIN_FREE_MB ATTACHMENT_QUOTA_MB_PER_DAY RATE_UPLOADS_PER_HOUR OAUTH_REDIRECT_HOSTS)
 
-# Passwort der Umzugsdatei: aus WIKI_EXPORT_PASSPHRASE (z. B. für Skripte), sonst beim Export erzeugt, beim Import abgefragt
+# Passwort der Umzugsdatei: aus --passphrase-file <datei> (z. B. für Skripte; root gehört sie, nur für root lesbar),
+# sonst beim Export erzeugt und nur im Terminal angezeigt, beim Import abgefragt
 migrate_passphrase() {
-  local mode=$1
-  MIGRATE_PASS=${WIKI_EXPORT_PASSPHRASE:-}
-  if [[ -n $MIGRATE_PASS ]]; then
-    ((${#MIGRATE_PASS} >= 16)) || die "WIKI_EXPORT_PASSPHRASE ist zu kurz (mindestens 16 Zeichen)."
+  local mode=$1 file=${2:-}
+  if [[ -n $file ]]; then
+    [[ -f $file && ! -L $file ]] || die "Passwortdatei $file fehlt."
+    [[ $(stat -c '%u' "$file") == 0 && $(($(stat -c '%#a' "$file") & 077)) == 0 ]] ||
+      die "Die Passwortdatei muss root gehören und darf nur für root lesbar sein (chmod 600)."
+    IFS= read -r MIGRATE_PASS <"$file" || true
+    ((${#MIGRATE_PASS} >= 16)) || die "Das Passwort in $file ist zu kurz (mindestens 16 Zeichen)."
     return 0
   fi
   if [[ $mode == export ]]; then
+    # Das erzeugte Passwort gehört nicht in umgeleitete Ausgaben oder Logs
+    [[ -t 1 ]] || die "Ausgabe geht nicht ins Terminal; das Passwort mit --passphrase-file vorgeben."
     MIGRATE_PASS=$(openssl rand -base64 33 | tr -d '/+=\n')
     MIGRATE_PASS_NEW=1
     return 0
   fi
-  [[ -t 0 ]] || die "Kein Terminal für die Passwortabfrage; das Passwort in WIKI_EXPORT_PASSPHRASE übergeben."
+  [[ -t 0 ]] || die "Kein Terminal für die Passwortabfrage; das Passwort mit --passphrase-file übergeben."
   read -r -s -p "Passwort der Umzugsdatei: " MIGRATE_PASS
   echo
   [[ -n $MIGRATE_PASS ]] || die "Kein Passwort eingegeben."
@@ -628,6 +641,15 @@ migrate_passphrase() {
 # gpg mit dem Passwort über einen eigenen Dateideskriptor (nicht in der Prozessliste) und ohne Zwischenspeicher im gpg-agent
 migrate_gpg() {
   gpg --batch --quiet --yes --no-tty --pinentry-mode loopback --no-symkey-cache --passphrase-fd 3 "$@" 3< <(printf '%s' "$MIGRATE_PASS")
+}
+
+# Klartext-Reste abgebrochener Läufe (z. B. nach Stromausfall) melden; sie enthalten Schlüssel und Datenbank
+migrate_leftovers() {
+  local d
+  for d in /var/tmp/wiki-export.* /var/tmp/wiki-import.*; do
+    [[ -d $d ]] && warn "Rest eines abgebrochenen Laufs mit Klartextdaten: $d (löschen mit sudo rm -rf $d)"
+  done
+  return 0
 }
 
 # Wert aus dem Manifest (Zeilen schlüssel=wert)
@@ -646,7 +668,7 @@ checksum_tree() {
 cmd_export() {
   need_root
   need_env
-  local out='' stop=0
+  local out='' stop=0 passfile=''
   while (($#)); do
     case $1 in
       --output)
@@ -654,8 +676,13 @@ cmd_export() {
         out=$2
         shift
         ;;
+      --passphrase-file)
+        [[ -n ${2:-} ]] || die "--passphrase-file braucht einen Dateinamen."
+        passfile=$2
+        shift
+        ;;
       --stop) stop=1 ;;
-      *) die "Unbekannte Option $1 (wikictl export [--output <datei>] [--stop])" ;;
+      *) die "Unbekannte Option $1 (wikictl export [--output <datei>] [--passphrase-file <datei>] [--stop])" ;;
     esac
     shift
   done
@@ -665,7 +692,7 @@ cmd_export() {
     install -d -m 700 /var/backups/wikifordummys
     out=/var/backups/wikifordummys/umzug-$(hostname -s)-$(date +%F-%H%M).wiki.gpg
   fi
-  [[ ! -e $out ]] || die "$out gibt es schon."
+  [[ ! -e $out && ! -e $out.part ]] || die "$out oder $out.part gibt es schon."
   [[ -d $(dirname "$out") ]] || die "Verzeichnis $(dirname "$out") fehlt."
 
   local attachments caddy db_mb att_mb caddy_mb=0 free need
@@ -678,7 +705,8 @@ cmd_export() {
   need=$((att_mb + caddy_mb + 2 * ${db_mb:-0} + 500))
   free=$(df -Pm "$(dirname "$out")" | awk 'NR == 2 {print $4}')
   ((free >= need)) || die "In $(dirname "$out") sind $free MB frei, die Umzugsdatei braucht etwa $need MB. Mit --output ein anderes Ziel angeben."
-  migrate_passphrase export
+  migrate_passphrase export "$passfile"
+  migrate_leftovers
 
   (
     set -Eeuo pipefail
@@ -696,7 +724,13 @@ cmd_export() {
 
     step "Datenbank exportieren"
     compose exec -T db pg_dump -U wiki --clean --if-exists --no-owner wiki >"$tmp/staging/wiki.sql"
-    cp -p "$ENV_FILE" "$tmp/staging/env"
+    # Nur was der Import übernimmt; Zugänge zur Sicherung und Passwörter, die nur hier gelten, bleiben auf diesem Server
+    local key value
+    : >"$tmp/staging/env"
+    for key in "${MIGRATE_KEYS[@]}"; do
+      value=$(env_get "$key")
+      if [[ -n $value ]]; then env_set "$key" "$value" "$tmp/staging/env"; fi
+    done
     git -C "$WIKI_DIR" rev-parse HEAD >"$tmp/staging/version"
     local counts svc id
     counts=$(compose exec -T db psql -At -U wiki -d wiki -c "$COUNTS_SQL" | tr -d '\r')
@@ -719,6 +753,9 @@ cmd_export() {
     } >"$tmp/staging/manifest"
     info "Inhalt: $counts"
 
+    if [[ -n $(find "$attachments" -perm /6000 -print -quit) ]]; then
+      warn "Im Anhang-Volume liegen Dateien mit setuid/setgid-Bit; der Import lehnt die Umzugsdatei ab. Prüfen: sudo find $attachments -perm /6000"
+    fi
     step "Prüfsummen berechnen"
     {
       checksum_tree "$tmp/staging" staging
@@ -768,11 +805,16 @@ cmd_export() {
 cmd_import() {
   need_root
   need_env
-  local file='' yes=0
+  local file='' yes=0 passfile=''
   while (($#)); do
     case $1 in
       --yes) yes=1 ;;
-      -*) die "Unbekannte Option $1 (wikictl import <datei> [--yes])" ;;
+      --passphrase-file)
+        [[ -n ${2:-} ]] || die "--passphrase-file braucht einen Dateinamen."
+        passfile=$2
+        shift
+        ;;
+      -*) die "Unbekannte Option $1 (wikictl import <datei> [--passphrase-file <datei>] [--yes])" ;;
       *) file=$1 ;;
     esac
     shift
@@ -787,15 +829,25 @@ cmd_import() {
   ((free >= size_mb + 1000)) || die "In /var/tmp sind $free MB frei, zum Auspacken nötig sind etwa $((size_mb + 1000)) MB."
   free=$(docker_free_mb)
   ((free >= size_mb + 2000)) || die "Für Docker sind $free MB frei, nötig sind etwa $((size_mb + 2000)) MB."
-  migrate_passphrase import
+  migrate_passphrase import "$passfile"
+  migrate_leftovers
 
   IMPORT_TMP=$(mktemp -d /var/tmp/wiki-import.XXXXXX)
   trap 'rm -rf "$IMPORT_TMP"' EXIT
-  local tmp=$IMPORT_TMP
+  local tmp=$IMPORT_TMP/data status=$IMPORT_TMP/gpg-status
+  install -d -m 700 "$tmp"
   step "Entschlüsseln und auspacken"
-  # gpg prüft die Integrität (MDC) am Ende und bricht dann mit Fehler ab; ausgepackt wird nur ins temporäre Verzeichnis
-  if ! migrate_gpg --decrypt "$file" | tar --numeric-owner --same-owner --no-overwrite-dir -xf - -C "$tmp"; then
+  # Ausgepackt wird nur ins temporäre Verzeichnis, verwendet erst nach den Prüfungen unten. gpg prüft die Integrität (MDC)
+  # am Ende; der Klartext ist so groß wie die Datei (export packt nicht), mehr bricht ab.
+  if ! migrate_gpg --status-fd 4 --max-output "$(((size_mb + 10) * 1048576))" --decrypt "$file" 4>"$status" |
+    tar --numeric-owner --same-owner --no-overwrite-dir -xf - -C "$tmp"; then
     die "Entschlüsseln fehlgeschlagen: falsches Passwort oder beschädigte Datei."
+  fi
+  # Ohne Verschlüsselung (z. B. gpg --store) gäbe gpg den Inhalt mit jedem Passwort aus: nur symmetrisch verschlüsselte,
+  # mit dem Passwort entschlüsselte und unveränderte Dateien annehmen
+  if ! grep -q '^\[GNUPG:\] NEED_PASSPHRASE_SYM ' "$status" || ! grep -q '^\[GNUPG:\] DECRYPTION_OKAY' "$status" ||
+    ! grep -q '^\[GNUPG:\] GOODMDC' "$status" || grep -q '^\[GNUPG:\] DECRYPTION_FAILED' "$status"; then
+    die "Die Datei ist nicht mit dem Passwort verschlüsselt oder nicht unverändert; das ist keine Umzugsdatei von wikictl export."
   fi
   local entry
   for entry in "$tmp"/*; do
@@ -804,7 +856,8 @@ cmd_import() {
       *) die "Unerwarteter Inhalt in der Umzugsdatei: ${entry##*/}" ;;
     esac
   done
-  [[ -n $(find "$tmp" -mindepth 1 ! -type f ! -type d -print -quit) ]] && die "Die Umzugsdatei enthält Verknüpfungen oder Gerätedateien."
+  [[ -z $(find "$tmp" -mindepth 1 ! -type f ! -type d -print -quit) ]] || die "Die Umzugsdatei enthält Verknüpfungen oder Gerätedateien."
+  [[ -z $(find "$tmp" -perm /6000 -print -quit) ]] || die "Die Umzugsdatei enthält Dateien mit setuid/setgid-Bit."
   local manifest=$tmp/staging/manifest
   [[ -f $manifest && -f $tmp/staging/wiki.sql && -f $tmp/staging/env ]] || die "Das ist keine Umzugsdatei von wikictl export."
   [[ $(manifest_get format "$manifest") == "$MIGRATE_FORMAT" ]] || die "Unbekanntes Format der Umzugsdatei ($(manifest_get format "$manifest"))."
@@ -879,7 +932,8 @@ cmd_import() {
   counts=$(compose exec -T db psql -At -U wiki -d wiki -c "$COUNTS_SQL" | tr -d '\r')
   expected=$(manifest_get counts "$manifest")
   [[ $counts == "$expected" ]] || die "Inhalt weicht ab: erwartet $expected, eingespielt $counts."
-  attachment_check "$(volume_path attachments)" < <(compose exec -T db psql -At -U wiki -d wiki -c "$ATTACHMENT_FILES_SQL" | tr -d '\r')
+  # Gegen die geprüfte Kopie in $tmp (cp -a hat sie 1:1 ins Volume übernommen), nicht im Volume, das die API schon nutzt
+  attachment_check "$tmp/attachments" < <(compose exec -T db psql -At -U wiki -d wiki -c "$ATTACHMENT_FILES_SQL" | tr -d '\r')
   ok "Inhalt wie auf dem alten Server: $counts, alle Anhänge vollständig."
   wait_drawio
   wait_office

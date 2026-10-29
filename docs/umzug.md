@@ -11,13 +11,13 @@ Wer schon eine restic-Sicherung an einem Ziel hat, das auch der neue Server erre
 | Datenbank (Benutzer, Spaces, Seiten, Versionen, Rechte, Audit-Log, Einstellungen, API- und OAuth-Tokens) | `pg_dump` |
 | Anhänge mit allen Fassungen, auch Office-Dateien und draw.io-Zeichnungen | Volume `attachments` |
 | Zertifikate, Let's-Encrypt-Konto und interne Zertifizierungsstelle von Caddy | Volume `caddy_data` |
-| `.env` mit allen Schlüsseln | `/opt/wikifordummys/.env` |
+| Schlüssel und Wiki-Einstellungen aus der `.env` (Liste unten), ohne Zugänge zur Sicherung und ohne Passwörter, die nur auf dem alten Server gelten | `/opt/wikifordummys/.env` |
 | Manifest: Code-Stand (Commit), Images, Domain, Betriebsart, Zählerstände | erzeugt beim Export |
 | SHA-256-Prüfsumme jeder Datei | erzeugt beim Export |
 
 Nicht enthalten sind Redis (nur Sitzungen und Sperren, alle melden sich nach dem Umzug neu an), die Daten des Office-Editors (er speichert keine Dokumente dauerhaft) und die restic-Sicherungen des alten Servers.
 
-Die Datei ist mit gpg verschlüsselt (AES-256, Passwort mit SHA-512 gestreckt, Integritätsschutz) und hat die Rechte 600. Das Passwort erzeugt `wikictl export` und zeigt es **einmal** an; gespeichert wird es nirgends.
+Die Datei ist mit gpg verschlüsselt (AES-256, Passwort mit SHA-512 gestreckt, Integritätsschutz) und hat die Rechte 600. Das Passwort erzeugt `wikictl export` und zeigt es **einmal** im Terminal an (nicht in umgeleiteten Ausgaben); gespeichert wird es nirgends. Beim Import verlangt `wikictl` eine wirklich mit Passwort verschlüsselte, unveränderte Datei; unverschlüsselte OpenPGP-Pakete, Verknüpfungen, Gerätedateien und Dateien mit setuid/setgid-Bit lehnt es ab.
 
 ## Ablauf
 
@@ -43,7 +43,7 @@ sudo wikictl export --stop
 - Die Datei landet unter `/var/backups/wikifordummys/umzug-<host>-<datum>.wiki.gpg`, mit `--output <datei>` woanders. Der Export prüft vorher den freien Platz (etwa so viel wie Anhänge plus doppelte Datenbank).
 - Am Ende stehen Dateigröße, SHA-256 der Datei und das **Passwort**. Beides notieren, z. B. im Passwortmanager.
 
-Für Skripte lässt sich ein eigenes Passwort (mindestens 16 Zeichen) über die Umgebungsvariable `WIKI_EXPORT_PASSPHRASE` vorgeben; das gilt auch für den Import.
+Für Skripte lässt sich ein eigenes Passwort (mindestens 16 Zeichen) mit `--passphrase-file <datei>` vorgeben, bei Export und Import. Die Datei muss root gehören und darf nur für root lesbar sein (`sudo sh -c 'umask 077; cat >/root/umzug.pass'`, Passwort eingeben, Strg+D). Das Passwort nicht auf der Kommandozeile übergeben, dort ist es für alle Benutzer des Servers sichtbar.
 
 ### 3. Datei übertragen
 
@@ -68,7 +68,7 @@ Der Import
 2. prüft die Prüfsumme jeder Datei und lehnt Verknüpfungen, Gerätedateien und Dateien ohne Prüfsumme ab,
 3. vergleicht den Code-Stand (muss gleich sein) und die Images (Abweichungen nur als Warnung),
 4. zeigt alt und neu (Server, Domain, Betriebsart, Inhalt) und wartet auf die Eingabe `UMZIEHEN` (ohne Rückfrage mit `--yes`),
-5. übernimmt aus der alten `.env` die Schlüssel und Wiki-Einstellungen (siehe unten), die bisherige `.env` bleibt als `.env.vor-import`,
+5. übernimmt die mitgebrachten Schlüssel und Wiki-Einstellungen (siehe unten), die bisherige `.env` bleibt als `.env.vor-import`,
 6. legt die Datenbank neu an, spielt Datenbank, Anhänge und, bei gleicher Domain und Betriebsart, die Zertifikate ein, verwirft alle Sitzungen und startet,
 7. vergleicht Benutzer, Spaces, Seiten und Anhänge mit dem Manifest, prüft jeden Anhang und jede ältere Fassung anhand der SHA-256 aus der Datenbank und wartet auf API, draw.io und Office-Editor.
 
@@ -90,7 +90,7 @@ Danach `sudo wikictl status` aufrufen.
 
 ## Was übernommen wird und was beim neuen Server bleibt
 
-| Aus der alten `.env` übernommen | Vom Installer des neuen Servers |
+| In der Umzugsdatei, übernommen | Vom Installer des neuen Servers (nicht in der Umzugsdatei) |
 | --- | --- |
 | `ENCRYPTION_KEY` (2FA und SMTP-Passwort aus der Administration), `SESSION_SECRET` | `WIKI_DOMAIN`, `WIKI_TLS`, Ports, Proxy-Einstellungen, `WIKI_IPV6` |
 | `SMTP_URL`, `MAIL_FROM` | `BACKUP_*`, `MONITOR_PING_URL` |
@@ -120,4 +120,4 @@ Bei gleicher Domain gibt es nichts davon: App, Connectors und Lesezeichen funkti
 | „… MB frei“ | Platz schaffen (`sudo wikictl cleanup`) oder beim Export `--output` auf eine größere Platte |
 | „Inhalt weicht ab“ bzw. „Anhänge fehlen“ | Import abgebrochen, bevor das Wiki als fertig gilt. Die alte `.env` liegt in `.env.vor-import`; Logs mit `sudo wikictl logs api`. Der alte Server ist unverändert und lässt sich mit `sudo wikictl start` wieder starten |
 
-Ein fehlgeschlagener Import lässt sich mit derselben Datei wiederholen.
+Ein fehlgeschlagener Import lässt sich mit derselben Datei wiederholen. Export und Import packen in `/var/tmp/wiki-export.*` bzw. `/var/tmp/wiki-import.*` im Klartext aus (nur für root lesbar) und räumen am Ende auf. Nach einem Absturz oder Stromausfall bleiben diese Verzeichnisse liegen; der nächste Lauf meldet sie, dann mit `sudo rm -rf` löschen.
