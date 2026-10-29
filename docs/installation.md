@@ -183,21 +183,37 @@ Den Zugang können Administratoren später auch in der Weboberfläche unter **Ad
 | `MONITOR_PING_URL` | optional |
 | `INSTALL_UNATTENDED`, `INSTALL_UFW`, `INSTALL_FAIL2BAN` | `j`/`n` |
 
-Beispiel:
+Passwörter und Schlüssel gehören nicht in die Kommandozeile, sonst stehen sie in der Shell-History, in der Prozessliste und im sudo-Protokoll. Am besten legst du die Antworten in einer Datei an, die nur root lesen darf, und löschst sie nach der Installation:
 
 ```bash
-sudo WIKI_TLS=letsencrypt WIKI_DOMAIN=wiki.firma.de \
-  SMTP_HOST=smtp.ionos.de SMTP_SECURITY=tls SMTP_USER=wiki@firma.de SMTP_PASSWORD='…' \
-  ADMIN_EMAIL=fabian@firma.de ADMIN_NAME=Fabian \
-  BACKUP_KIND=s3 BACKUP_REPOSITORY=s3:https://fsn1.your-objectstorage.com/firma-backup/wiki \
-  BACKUP_S3_ACCESS_KEY_ID=… BACKUP_S3_SECRET_ACCESS_KEY=… \
-  ./install.sh --non-interactive
+sudo install -m 600 /dev/null /root/wiki-antworten.env
+sudo nano /root/wiki-antworten.env
+```
+
+```bash
+WIKI_TLS=letsencrypt
+WIKI_DOMAIN=wiki.firma.de
+SMTP_HOST=smtp.ionos.de
+SMTP_SECURITY=tls
+SMTP_USER=wiki@firma.de
+SMTP_PASSWORD='…'
+ADMIN_EMAIL=fabian@firma.de
+ADMIN_NAME=Fabian
+BACKUP_KIND=s3
+BACKUP_REPOSITORY=s3:https://fsn1.your-objectstorage.com/firma-backup/wiki
+BACKUP_S3_ACCESS_KEY_ID=…
+BACKUP_S3_SECRET_ACCESS_KEY=…
+```
+
+```bash
+sudo bash -c 'set -a; . /root/wiki-antworten.env; set +a; exec ./install.sh --non-interactive'
+sudo shred -u /root/wiki-antworten.env
 ```
 
 ## Von Hand statt mit dem Installer
 
 1. Docker Engine mit Compose-Plugin installieren ([Anleitung](https://docs.docker.com/engine/install/ubuntu/)).
-2. `cp .env.example .env && chmod 600 .env`, Geheimnisse mit `openssl rand -hex 32` erzeugen und die Werte eintragen (Kommentare in der Datei).
+2. `cp .env.example .env && chmod 600 .env`, Geheimnisse mit `openssl rand -hex 32` erzeugen und die Werte eintragen (Kommentare in der Datei). Die API startet nicht, solange `SESSION_SECRET` oder (mit Office-Editor) `OFFICE_JWT_SECRET` noch den Platzhalter `bitte-…` oder einen Testwert enthält.
 3. `docker compose build && docker compose up -d`
 4. `docker compose exec api node dist/cli.js create-admin --email … --name "…"` (gibt ein Startpasswort aus)
 5. Optional `deploy/wikictl` nach `/usr/local/bin/wikictl` verlinken und die Units aus `deploy/systemd/` installieren.

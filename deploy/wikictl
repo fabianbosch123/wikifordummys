@@ -354,10 +354,10 @@ cmd_backup_init() {
     install -d -m 700 "$RESTIC_REPOSITORY"
   fi
   if restic cat config >/dev/null 2>&1; then
-    ok "Sicherungsziel $RESTIC_REPOSITORY ist bereit."
+    ok "Sicherungsziel $(mask_url "$RESTIC_REPOSITORY") ist bereit."
   else
     restic init >/dev/null
-    ok "Sicherungsziel $RESTIC_REPOSITORY angelegt."
+    ok "Sicherungsziel $(mask_url "$RESTIC_REPOSITORY") angelegt."
   fi
 }
 
@@ -390,7 +390,7 @@ backup_run() {
     local attachments caddy
     attachments=$(volume_path attachments) || die "Volume ${COMPOSE_PROJECT}_attachments fehlt."
     caddy=$(volume_path caddy_data) || caddy=''
-    step "Sichern nach $RESTIC_REPOSITORY"
+    step "Sichern nach $(mask_url "$RESTIC_REPOSITORY")"
     local paths=("$STAGING" "$attachments")
     if [[ -n $caddy ]]; then paths+=("$caddy"); fi
     restic backup --tag "$tag" --host "$(hostname)" "${paths[@]}"
