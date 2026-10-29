@@ -20,6 +20,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 | --- | --- |
 | [docs/installation.md](docs/installation.md) | Voraussetzungen, Ablauf des Installers, Betriebsarten mit Proxy-Beispielen, Mail-Anbieter, Installation ohne Rückfragen oder von Hand |
 | [docs/betrieb.md](docs/betrieb.md) | `wikictl`, Office-Editor, draw.io, Updates, Sicherung und Wiederherstellung, Überwachung, fail2ban, Platte voll |
+| [docs/umzug.md](docs/umzug.md) | Umzug auf einen anderen Server mit `wikictl export` und `import`, auch mit neuer Domain |
 | [docs/mcp.md](docs/mcp.md) | MCP-Server einrichten (claude.ai, Claude Code, Claude Desktop), Werkzeuge, Fehlersuche |
 | [docs/go-live.md](docs/go-live.md) | Abnahme-Checkliste und Pilotbetrieb |
 
@@ -109,6 +110,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
   | `update [git-ref]` | Update mit vorheriger Sicherung und Platzprüfung, fragt neue optionale Dienste einmal ab, räumt danach alte Images und Build-Cache auf |
   | `cleanup` | Platz schaffen (Build-Cache, unbenutzte Images, Journal); Volumes und Sicherungen bleiben |
   | `backup`, `snapshots`, `restore <id\|latest>`, `restore-test` | Sicherung, Stände, Wiederherstellung (auch auf einem neuen Server), Test-Wiederherstellung |
+  | `export [--stop]`, `import <datei>` | Umzug auf einen anderen Server: verschlüsselte Umzugsdatei mit Manifest und Prüfsummen, Import mit Versions- und Inhaltsprüfung |
   | `office on\|off`, `office-check`, `drawio on\|off` | Optionale Dienste |
   | `create-admin`, `reset-password`, `mail-test` | Konten und Mailversand |
   | `reconfigure`, `monitor`, `ca-cert` | Installer erneut, Health-Check mit Push, Stammzertifikat (Betriebsart `internal`) |

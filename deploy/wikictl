@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# wikictl: Betrieb von wikifordummys (Status, Update, Sicherung, Wiederherstellung, Überwachung).
+# wikictl: Betrieb von wikifordummys (Status, Update, Sicherung, Wiederherstellung, Umzug, Überwachung).
 # Wird von install.sh nach /usr/local/bin/wikictl verlinkt.
 set -Eeuo pipefail
 
@@ -45,6 +45,13 @@ Sicherung (restic, Ziel aus .env)
                           Stand zurückspielen; --with-env übernimmt auch .env (neuer Server)
   restore-test            Sicherung probeweise in einen Wegwerf-Container einspielen und prüfen
   backup-init             Sicherungsziel anlegen bzw. prüfen
+
+Umzug auf einen anderen Server (docs/umzug.md)
+  export [--output <datei>] [--passphrase-file <datei>] [--stop]
+                          alles in eine verschlüsselte Datei packen (Wiki dabei kurz angehalten);
+                          --stop lässt den alten Server danach aus
+  import <datei> [--passphrase-file <datei>] [--yes]
+                          Umzugsdatei auf einem frisch installierten Server einspielen und prüfen
 
 Sonstiges
   ca-cert                 Stammzertifikat der internen Zertifizierungsstelle ausgeben (Betriebsart internal)
@@ -427,6 +434,46 @@ restore_to_dir() {
   rm -rf "$target/raw"
 }
 
+# Spielt einen ausgepackten Stand ein (Verzeichnis mit staging/wiki.sql, attachments/, caddy_data/): Datenbank frisch
+# anlegen, Anhänge und (falls vorhanden) Zertifikate ersetzen, Sitzungen verwerfen, starten. Gemeinsam für restore und import.
+restore_apply() {
+  local tmp=$1
+  step "Dienste anhalten"
+  compose stop caddy web api >/dev/null 2>&1 || true
+  step "Datenbank neu anlegen und einspielen"
+  # Frisches Volume, damit das Datenbankpasswort zur (ggf. übernommenen) .env passt
+  compose rm -sf db >/dev/null
+  docker volume rm -f "${COMPOSE_PROJECT}_pgdata" >/dev/null
+  compose up -d db redis
+  local i
+  for i in $(seq 1 60); do
+    compose exec -T db pg_isready -U wiki -d wiki >/dev/null 2>&1 && break
+    sleep 2
+  done
+  compose exec -T db psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <"$tmp/staging/wiki.sql" >/dev/null
+  ok "Datenbank eingespielt."
+
+  step "Anhänge und Zertifikate zurückspielen"
+  compose create api caddy >/dev/null 2>&1 || true
+  local vol
+  vol=$(volume_path attachments)
+  find "$vol" -mindepth 1 -delete
+  cp -a "$tmp/attachments/." "$vol/"
+  if [[ -n $(ls -A "$tmp/caddy_data" 2>/dev/null) ]]; then
+    vol=$(volume_path caddy_data)
+    find "$vol" -mindepth 1 -delete
+    cp -a "$tmp/caddy_data/." "$vol/"
+  fi
+  ok "Dateien zurückgespielt."
+
+  step "Starten"
+  # Sitzungen und Sperren gehören zum alten Stand
+  # shellcheck disable=SC2016 # $REDIS_PASSWORD wird im Container aufgelöst
+  compose exec -T redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli FLUSHALL' >/dev/null || true
+  compose up -d
+  wait_healthy 300 || die "Die API ist nach der Wiederherstellung nicht gesund; Logs: wikictl logs api"
+}
+
 cmd_restore() {
   need_root
   need_env
@@ -469,40 +516,7 @@ cmd_restore() {
     backup_run vor-wiederherstellung || warn "Sicherung des aktuellen Stands fehlgeschlagen; fahre trotzdem fort."
   fi
 
-  step "Dienste anhalten"
-  compose stop caddy web api >/dev/null 2>&1 || true
-  step "Datenbank neu anlegen und einspielen"
-  # Frisches Volume, damit das Datenbankpasswort zur (ggf. übernommenen) .env passt
-  compose rm -sf db >/dev/null
-  docker volume rm -f "${COMPOSE_PROJECT}_pgdata" >/dev/null
-  compose up -d db redis
-  local i
-  for i in $(seq 1 60); do
-    compose exec -T db pg_isready -U wiki -d wiki >/dev/null 2>&1 && break
-    sleep 2
-  done
-  compose exec -T db psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <"$tmp/staging/wiki.sql" >/dev/null
-  ok "Datenbank eingespielt."
-
-  step "Anhänge und Zertifikate zurückspielen"
-  compose create api caddy >/dev/null 2>&1 || true
-  local vol
-  vol=$(volume_path attachments)
-  find "$vol" -mindepth 1 -delete
-  cp -a "$tmp/attachments/." "$vol/"
-  if [[ -n $(ls -A "$tmp/caddy_data" 2>/dev/null) ]]; then
-    vol=$(volume_path caddy_data)
-    find "$vol" -mindepth 1 -delete
-    cp -a "$tmp/caddy_data/." "$vol/"
-  fi
-  ok "Dateien zurückgespielt."
-
-  step "Starten"
-  # Sitzungen und Sperren gehören zum alten Stand
-  # shellcheck disable=SC2016 # $REDIS_PASSWORD wird im Container aufgelöst
-  compose exec -T redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli FLUSHALL' >/dev/null || true
-  compose up -d
-  wait_healthy 300 || die "Die API ist nach der Wiederherstellung nicht gesund; Logs: wikictl logs api"
+  restore_apply "$tmp"
   ok "Wiederherstellung abgeschlossen. Alle Benutzer müssen sich neu anmelden."
 }
 
@@ -517,6 +531,35 @@ cmd_restore_test() {
   fi
   if [[ -n $ping ]]; then ping_url "$ping/fail"; fi
   die "Test-Wiederherstellung fehlgeschlagen."
+}
+
+# Zählerstände für Prüfungen und Manifest (eine Zeile, gleiche Form in restore-test, export und import)
+COUNTS_SQL="SELECT (SELECT count(*) FROM users) || ' Benutzer, ' || (SELECT count(*) FROM spaces) || ' Spaces, ' || (SELECT count(*) FROM pages) || ' Seiten, ' || (SELECT count(*) FROM attachments) || ' Anhänge'"
+# Alle Dateien im Anhang-Verzeichnis mit Prüfsumme: aktuelle Anhänge und ältere Fassungen
+ATTACHMENT_FILES_SQL="SELECT storage_key, sha256 FROM attachments UNION SELECT storage_key, sha256 FROM attachment_versions"
+
+# Jeder Anhang muss mit der Prüfsumme aus der Datenbank vorhanden sein (Ablage: <erste 2 Zeichen>/<schlüssel>).
+# attachment_check <verzeichnis>, Zeilen "schlüssel|sha256" auf stdin; bricht bei fehlenden oder beschädigten Dateien ab.
+attachment_check() {
+  local dir=$1 broken=0 key sum file
+  while IFS='|' read -r key sum; do
+    [[ -z $key ]] && continue
+    # Schlüssel wie in der API (attachment-storage.service.ts) und keine Verknüpfungen: root liest nur im Verzeichnis
+    if [[ ! $key =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+      broken=$((broken + 1))
+      warn "Ungültiger Ablageschlüssel in der Datenbank: $(printf '%q' "$key")"
+      continue
+    fi
+    file=$dir/${key:0:2}/$key
+    if [[ -L $file || ! -f $file ]]; then
+      broken=$((broken + 1))
+      warn "Anhang fehlt: $key"
+    elif [[ $(sha256sum "$file" | cut -d' ' -f1) != "$sum" ]]; then
+      broken=$((broken + 1))
+      warn "Anhang beschädigt (Prüfsumme): $key"
+    fi
+  done
+  ((broken == 0)) || die "$broken Anhänge fehlen oder sind beschädigt."
 }
 
 # Dasselbe Postgres-Image wie der Dienst db, damit der Test nicht ein zweites, ungepflegtes Image zieht
@@ -551,26 +594,356 @@ restore_test_run() {
     done
     docker exec -i "$name" psql -q -v ON_ERROR_STOP=1 -U wiki -d wiki <"$tmp/staging/wiki.sql" >/dev/null
     local counts
-    counts=$(docker exec "$name" psql -At -U wiki -d wiki -c \
-      "SELECT (SELECT count(*) FROM users) || ' Benutzer, ' || (SELECT count(*) FROM spaces) || ' Spaces, ' || (SELECT count(*) FROM pages) || ' Seiten, ' || (SELECT count(*) FROM attachments) || ' Anhänge'")
+    counts=$(docker exec "$name" psql -At -U wiki -d wiki -c "$COUNTS_SQL")
     info "Inhalt: $counts"
-    # Jeder Anhang muss mit der Prüfsumme aus der Datenbank vorhanden sein (Ablage: <erste 2 Zeichen>/<schlüssel>)
-    local broken=0 key sum file
-    while IFS='|' read -r key sum; do
-      [[ -z $key ]] && continue
-      file=$tmp/attachments/${key:0:2}/$key
-      if [[ ! -f $file ]]; then
-        broken=$((broken + 1))
-        warn "Anhang fehlt in der Sicherung: $key"
-      elif [[ $(sha256sum "$file" | cut -d' ' -f1) != "$sum" ]]; then
-        broken=$((broken + 1))
-        warn "Anhang beschädigt (Prüfsumme): $key"
-      fi
-    done < <(docker exec "$name" psql -At -U wiki -d wiki -c "SELECT storage_key, sha256 FROM attachments")
-    ((broken == 0)) || die "$broken Anhänge fehlen oder sind beschädigt."
+    attachment_check "$tmp/attachments" < <(docker exec "$name" psql -At -U wiki -d wiki -c "$ATTACHMENT_FILES_SQL")
     [[ -s $tmp/staging/env ]] || die ".env fehlt in der Sicherung."
     ok "Test-Wiederherstellung erfolgreich: $counts, alle Anhänge vollständig."
   )
+}
+
+# ---------------------------------------------------------------------------
+# Umzug auf einen anderen Server: export packt alles in eine verschlüsselte Datei, import spielt sie auf einem
+# frisch installierten Server ein (Ablauf in docs/umzug.md)
+
+MIGRATE_FORMAT=1
+# Aus der .env des alten Servers übernommen: Schlüssel, ohne die Daten unbrauchbar werden (ENCRYPTION_KEY: 2FA und
+# SMTP-Passwort in der Datenbank), und Einstellungen des Wikis. Alles andere (Domain, Betriebsart, Ports, Proxy,
+# Sicherung, Überwachung, Passwörter von Datenbank und Redis) hat der Installer auf dem neuen Server festgelegt.
+MIGRATE_KEYS=(ENCRYPTION_KEY SESSION_SECRET SMTP_URL MAIL_FROM WIKI_OFFICE WIKI_DRAWIO OFFICE_VERSION ATTACHMENT_MAX_MB
+  ATTACHMENT_MIN_FREE_MB ATTACHMENT_QUOTA_MB_PER_DAY RATE_UPLOADS_PER_HOUR OAUTH_REDIRECT_HOSTS)
+
+# Passwort der Umzugsdatei: aus --passphrase-file <datei> (z. B. für Skripte; root gehört sie, nur für root lesbar),
+# sonst beim Export erzeugt und nur im Terminal angezeigt, beim Import abgefragt
+migrate_passphrase() {
+  local mode=$1 file=${2:-}
+  if [[ -n $file ]]; then
+    [[ -f $file && ! -L $file ]] || die "Passwortdatei $file fehlt."
+    [[ $(stat -c '%u' "$file") == 0 && $(($(stat -c '%#a' "$file") & 077)) == 0 ]] ||
+      die "Die Passwortdatei muss root gehören und darf nur für root lesbar sein (chmod 600)."
+    IFS= read -r MIGRATE_PASS <"$file" || true
+    ((${#MIGRATE_PASS} >= 16)) || die "Das Passwort in $file ist zu kurz (mindestens 16 Zeichen)."
+    return 0
+  fi
+  if [[ $mode == export ]]; then
+    # Das erzeugte Passwort gehört nicht in umgeleitete Ausgaben oder Logs
+    [[ -t 1 ]] || die "Ausgabe geht nicht ins Terminal; das Passwort mit --passphrase-file vorgeben."
+    MIGRATE_PASS=$(openssl rand -base64 33 | tr -d '/+=\n')
+    MIGRATE_PASS_NEW=1
+    return 0
+  fi
+  [[ -t 0 ]] || die "Kein Terminal für die Passwortabfrage; das Passwort mit --passphrase-file übergeben."
+  read -r -s -p "Passwort der Umzugsdatei: " MIGRATE_PASS
+  echo
+  [[ -n $MIGRATE_PASS ]] || die "Kein Passwort eingegeben."
+}
+
+# gpg mit dem Passwort über einen eigenen Dateideskriptor (nicht in der Prozessliste) und ohne Zwischenspeicher im gpg-agent
+migrate_gpg() {
+  gpg --batch --quiet --yes --no-tty --pinentry-mode loopback --no-symkey-cache --passphrase-fd 3 "$@" 3< <(printf '%s' "$MIGRATE_PASS")
+}
+
+# Klartext-Reste abgebrochener Läufe (z. B. nach Stromausfall) melden; sie enthalten Schlüssel und Datenbank
+migrate_leftovers() {
+  local d
+  for d in /var/tmp/wiki-export.* /var/tmp/wiki-import.*; do
+    [[ -d $d ]] && warn "Rest eines abgebrochenen Laufs mit Klartextdaten: $d (löschen mit sudo rm -rf $d)"
+  done
+  return 0
+}
+
+# Wert aus dem Manifest (Zeilen schlüssel=wert)
+manifest_get() {
+  local line
+  line=$(grep -E "^$1=" "$2" | head -n 1) || true
+  printf '%s' "${line#*=}"
+}
+
+# Prüfsummen aller Dateien unter <basis>, mit Pfaden ab dem Wurzelverzeichnis des Archivs (<präfix>/…)
+checksum_tree() {
+  local base=$1 prefix=$2
+  (cd "$base" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) | sed "s|  \./|  $prefix/|"
+}
+
+cmd_export() {
+  need_root
+  need_env
+  local out='' stop=0 passfile=''
+  while (($#)); do
+    case $1 in
+      --output)
+        [[ -n ${2:-} ]] || die "--output braucht einen Dateinamen."
+        out=$2
+        shift
+        ;;
+      --passphrase-file)
+        [[ -n ${2:-} ]] || die "--passphrase-file braucht einen Dateinamen."
+        passfile=$2
+        shift
+        ;;
+      --stop) stop=1 ;;
+      *) die "Unbekannte Option $1 (wikictl export [--output <datei>] [--passphrase-file <datei>] [--stop])" ;;
+    esac
+    shift
+  done
+  command -v gpg >/dev/null || die "gpg fehlt: sudo apt install gnupg"
+  compose ps -q db 2>/dev/null | grep -q . || die "Die Datenbank läuft nicht. Zuerst starten: sudo wikictl start"
+  if [[ -z $out ]]; then
+    install -d -m 700 /var/backups/wikifordummys
+    out=/var/backups/wikifordummys/umzug-$(hostname -s)-$(date +%F-%H%M).wiki.gpg
+  fi
+  [[ ! -e $out && ! -e $out.part ]] || die "$out oder $out.part gibt es schon."
+  [[ -d $(dirname "$out") ]] || die "Verzeichnis $(dirname "$out") fehlt."
+
+  local attachments caddy db_mb att_mb caddy_mb=0 free need
+  attachments=$(volume_path attachments) || die "Volume ${COMPOSE_PROJECT}_attachments fehlt."
+  caddy=$(volume_path caddy_data) || caddy=''
+  att_mb=$(du -sm "$attachments" | cut -f1)
+  if [[ -n $caddy ]]; then caddy_mb=$(du -sm "$caddy" | cut -f1); fi
+  db_mb=$(compose exec -T db psql -At -U wiki -d wiki -c "SELECT pg_database_size('wiki') / 1048576" | tr -d '\r')
+  # Ziel: Anhänge, Zertifikate und Datenbankexport; der Export liegt zusätzlich kurz in /var/tmp
+  need=$((att_mb + caddy_mb + 2 * ${db_mb:-0} + 500))
+  free=$(df -Pm "$(dirname "$out")" | awk 'NR == 2 {print $4}')
+  ((free >= need)) || die "In $(dirname "$out") sind $free MB frei, die Umzugsdatei braucht etwa $need MB. Mit --output ein anderes Ziel angeben."
+  migrate_passphrase export "$passfile"
+  migrate_leftovers
+
+  (
+    set -Eeuo pipefail
+    umask 077
+    local tmp stopped=0
+    tmp=$(mktemp -d /var/tmp/wiki-export.XXXXXX)
+    # Bei Fehlern das Wiki wieder starten und nichts Halbfertiges liegen lassen
+    trap 'rm -rf "$tmp" "$out.part"; if ((stopped)); then compose up -d >/dev/null 2>&1 || true; fi' EXIT
+    install -d -m 700 "$tmp/staging"
+
+    step "Schreibzugriffe anhalten (Weboberfläche, API und Caddy)"
+    info "Das Wiki ist bis zum Ende des Exports nicht erreichbar."
+    stopped=1
+    compose stop caddy web api >/dev/null
+
+    step "Datenbank exportieren"
+    compose exec -T db pg_dump -U wiki --clean --if-exists --no-owner wiki >"$tmp/staging/wiki.sql"
+    # Nur was der Import übernimmt; Zugänge zur Sicherung und Passwörter, die nur hier gelten, bleiben auf diesem Server
+    local key value
+    : >"$tmp/staging/env"
+    for key in "${MIGRATE_KEYS[@]}"; do
+      value=$(env_get "$key")
+      if [[ -n $value ]]; then env_set "$key" "$value" "$tmp/staging/env"; fi
+    done
+    git -C "$WIKI_DIR" rev-parse HEAD >"$tmp/staging/version"
+    local counts svc id
+    counts=$(compose exec -T db psql -At -U wiki -d wiki -c "$COUNTS_SQL" | tr -d '\r')
+    {
+      echo "format=$MIGRATE_FORMAT"
+      echo "created=$(date -Is)"
+      echo "host=$(hostname)"
+      echo "commit=$(cat "$tmp/staging/version")"
+      echo "domain=$(env_get WIKI_DOMAIN)"
+      echo "tls=$(env_get WIKI_TLS)"
+      echo "office=$(env_get WIKI_OFFICE)"
+      echo "drawio=$(env_get WIKI_DRAWIO)"
+      echo "counts=$counts"
+      # Images, mit denen der alte Server lief (Name und ID), zum Vergleich auf dem neuen Server
+      for svc in $(compose config --services); do
+        id=$(compose ps -aq "$svc" 2>/dev/null | head -n 1)
+        [[ -n $id ]] || continue
+        echo "image.$svc=$(docker inspect -f '{{.Config.Image}} {{.Image}}' "$id")"
+      done
+    } >"$tmp/staging/manifest"
+    info "Inhalt: $counts"
+
+    if [[ -n $(find "$attachments" -perm /6000 -print -quit) ]]; then
+      warn "Im Anhang-Volume liegen Dateien mit setuid/setgid-Bit; der Import lehnt die Umzugsdatei ab. Prüfen: sudo find $attachments -perm /6000"
+    fi
+    step "Prüfsummen berechnen"
+    {
+      checksum_tree "$tmp/staging" staging
+      checksum_tree "$attachments" attachments
+      if [[ -n $caddy ]]; then checksum_tree "$caddy" caddy_data; fi
+    } >"$tmp/checksums.sha256"
+    mv "$tmp/checksums.sha256" "$tmp/staging/checksums.sha256"
+
+    step "Packen und verschlüsseln nach $out"
+    # Volumes unter festen Namen ins Archiv; Verknüpfungen werden nicht verfolgt
+    local vroot names=("${COMPOSE_PROJECT}_attachments/_data")
+    vroot=$(dirname "$(dirname "$attachments")")
+    if [[ -n $caddy ]]; then
+      [[ $(dirname "$(dirname "$caddy")") == "$vroot" ]] || die "Die Volumes liegen in verschiedenen Verzeichnissen; das unterstützt der Export nicht."
+      names+=("${COMPOSE_PROJECT}_caddy_data/_data")
+    fi
+    tar --numeric-owner -cf - -C "$tmp" staging -C "$vroot" \
+      --transform "s|^${COMPOSE_PROJECT}_attachments/_data|attachments|S" \
+      --transform "s|^${COMPOSE_PROJECT}_caddy_data/_data|caddy_data|S" "${names[@]}" |
+      migrate_gpg --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 --compress-algo none -o "$out.part"
+    chmod 600 "$out.part"
+    mv "$out.part" "$out"
+
+    if ((stop)); then
+      step "Alter Server bleibt angehalten"
+      compose stop >/dev/null
+      info "Alle Dienste sind angehalten, damit niemand mehr hier schreibt. Wieder starten mit: sudo wikictl start"
+    else
+      step "Wiki wieder starten"
+      compose up -d >/dev/null
+      wait_healthy 300 || warn "Die API ist noch nicht gesund; Logs: wikictl logs api"
+    fi
+    # shellcheck disable=SC2034 # liest der trap
+    stopped=0
+  ) || die "Export fehlgeschlagen."
+
+  ok "Umzugsdatei: $out ($(du -h "$out" | cut -f1))"
+  info "SHA-256: $(sha256sum "$out" | cut -d' ' -f1)  (nach dem Kopieren auf dem neuen Server mit sha256sum vergleichen)"
+  if ((${MIGRATE_PASS_NEW:-0})); then
+    step "Passwort der Umzugsdatei (wird nicht gespeichert, jetzt notieren)"
+    info "  $MIGRATE_PASS"
+  fi
+  info "Die Datei enthält alle Schlüssel des Wikis. Getrennt vom Passwort übertragen und nach dem Umzug löschen."
+  info "Weiter auf dem neuen Server: Installer ausführen, Datei kopieren, sudo wikictl import <datei> (docs/umzug.md)."
+}
+
+cmd_import() {
+  need_root
+  need_env
+  local file='' yes=0 passfile=''
+  while (($#)); do
+    case $1 in
+      --yes) yes=1 ;;
+      --passphrase-file)
+        [[ -n ${2:-} ]] || die "--passphrase-file braucht einen Dateinamen."
+        passfile=$2
+        shift
+        ;;
+      -*) die "Unbekannte Option $1 (wikictl import <datei> [--passphrase-file <datei>] [--yes])" ;;
+      *) file=$1 ;;
+    esac
+    shift
+  done
+  [[ -n $file ]] || die "Welche Datei? sudo wikictl import <umzugsdatei>"
+  [[ -f $file ]] || die "$file gibt es nicht."
+  command -v gpg >/dev/null || die "gpg fehlt: sudo apt install gnupg"
+  local size_mb free
+  size_mb=$(du -m "$file" | cut -f1)
+  # Ausgepackt in /var/tmp und danach noch einmal in den Volumes
+  free=$(df -Pm /var/tmp | awk 'NR == 2 {print $4}')
+  ((free >= size_mb + 1000)) || die "In /var/tmp sind $free MB frei, zum Auspacken nötig sind etwa $((size_mb + 1000)) MB."
+  free=$(docker_free_mb)
+  ((free >= size_mb + 2000)) || die "Für Docker sind $free MB frei, nötig sind etwa $((size_mb + 2000)) MB."
+  migrate_passphrase import "$passfile"
+  migrate_leftovers
+
+  IMPORT_TMP=$(mktemp -d /var/tmp/wiki-import.XXXXXX)
+  trap 'rm -rf "$IMPORT_TMP"' EXIT
+  local tmp=$IMPORT_TMP/data status=$IMPORT_TMP/gpg-status
+  install -d -m 700 "$tmp"
+  step "Entschlüsseln und auspacken"
+  # Ausgepackt wird nur ins temporäre Verzeichnis, verwendet erst nach den Prüfungen unten. gpg prüft die Integrität (MDC)
+  # am Ende; der Klartext ist so groß wie die Datei (export packt nicht), mehr bricht ab.
+  if ! migrate_gpg --status-fd 4 --max-output "$(((size_mb + 10) * 1048576))" --decrypt "$file" 4>"$status" |
+    tar --numeric-owner --same-owner --no-overwrite-dir -xf - -C "$tmp"; then
+    die "Entschlüsseln fehlgeschlagen: falsches Passwort oder beschädigte Datei."
+  fi
+  # Ohne Verschlüsselung (z. B. gpg --store) gäbe gpg den Inhalt mit jedem Passwort aus: nur symmetrisch verschlüsselte,
+  # mit dem Passwort entschlüsselte und unveränderte Dateien annehmen
+  if ! grep -q '^\[GNUPG:\] NEED_PASSPHRASE_SYM ' "$status" || ! grep -q '^\[GNUPG:\] DECRYPTION_OKAY' "$status" ||
+    ! grep -q '^\[GNUPG:\] GOODMDC' "$status" || grep -q '^\[GNUPG:\] DECRYPTION_FAILED' "$status" ||
+    (($(grep -c '^\[GNUPG:\] PLAINTEXT ' "$status") != 1)); then
+    die "Die Datei ist nicht mit dem Passwort verschlüsselt oder nicht unverändert; das ist keine Umzugsdatei von wikictl export."
+  fi
+  local entry
+  for entry in "$tmp"/*; do
+    case ${entry##*/} in
+      staging | attachments | caddy_data) ;;
+      *) die "Unerwarteter Inhalt in der Umzugsdatei: ${entry##*/}" ;;
+    esac
+  done
+  [[ -z $(find "$tmp" -mindepth 1 ! -type f ! -type d -print -quit) ]] || die "Die Umzugsdatei enthält Verknüpfungen oder Gerätedateien."
+  [[ -z $(find "$tmp" -perm /6000 -print -quit) ]] || die "Die Umzugsdatei enthält Dateien mit setuid/setgid-Bit."
+  local manifest=$tmp/staging/manifest
+  [[ -f $manifest && -f $tmp/staging/wiki.sql && -f $tmp/staging/env ]] || die "Das ist keine Umzugsdatei von wikictl export."
+  [[ $(manifest_get format "$manifest") == "$MIGRATE_FORMAT" ]] || die "Unbekanntes Format der Umzugsdatei ($(manifest_get format "$manifest"))."
+  install -d "$tmp/attachments" "$tmp/caddy_data"
+
+  step "Prüfsummen prüfen"
+  (cd "$tmp" && sha256sum --check --quiet --strict staging/checksums.sha256) || die "Prüfsummen stimmen nicht; die Datei ist beschädigt."
+  local listed present
+  listed=$(wc -l <"$tmp/staging/checksums.sha256")
+  present=$(cd "$tmp" && find staging attachments caddy_data -type f ! -path staging/checksums.sha256 | wc -l)
+  ((listed == present)) || die "Die Umzugsdatei enthält Dateien ohne Prüfsumme."
+  ok "Alle $listed Dateien unverändert."
+
+  step "Versionen vergleichen"
+  local commit here
+  commit=$(manifest_get commit "$manifest")
+  here=$(git -C "$WIKI_DIR" rev-parse HEAD)
+  if [[ $commit != "$here" ]]; then
+    die "Der alte Server lief mit Stand ${commit:0:12}, dieser mit ${here:0:12}. Zuerst angleichen: sudo wikictl update $commit, dann den Import wiederholen."
+  fi
+  ok "Gleicher Stand: ${here:0:12}."
+  local line service ref images
+  # Fremde Images stehen mit Digest in docker-compose.yml; eigene werden gebaut und haben daher eine andere ID
+  images=$(compose config --images 2>/dev/null || true)
+  while IFS= read -r line; do
+    [[ $line == image.* ]] || continue
+    service=${line%%=*} service=${service#image.}
+    read -r ref _ <<<"${line#*=}"
+    [[ $ref == *@sha256:* ]] || continue
+    grep -Fxq -- "$ref" <<<"$images" || warn "Image für $service weicht ab: auf dem alten Server $ref, hier nicht in docker-compose.yml"
+  done <"$manifest"
+
+  local old_domain new_domain old_tls new_tls current
+  old_domain=$(manifest_get domain "$manifest")
+  new_domain=$(env_get WIKI_DOMAIN)
+  old_tls=$(manifest_get tls "$manifest")
+  new_tls=$(env_get WIKI_TLS)
+  current=$(compose exec -T db psql -At -U wiki -d wiki -c "$COUNTS_SQL" 2>/dev/null | tr -d '\r' || true)
+  step "Umzug"
+  info "  Von:      $(manifest_get host "$manifest") ($old_domain, ${old_tls:-letsencrypt}), exportiert $(manifest_get created "$manifest")"
+  info "  Nach:     $(hostname) ($new_domain, ${new_tls:-letsencrypt})"
+  info "  Inhalt:   $(manifest_get counts "$manifest")"
+  warn "Datenbank und Anhänge dieses Servers werden ersetzt${current:+ (bisher: $current)}."
+  if ((!yes)); then
+    local answer
+    read -r -p "Zum Fortfahren UMZIEHEN eingeben: " answer
+    [[ $answer == UMZIEHEN ]] || die "Abgebrochen."
+  fi
+
+  step "Schlüssel und Einstellungen vom alten Server übernehmen"
+  local key value
+  [[ -n $(env_get ENCRYPTION_KEY "$tmp/staging/env") ]] || die "ENCRYPTION_KEY fehlt in der Umzugsdatei."
+  cp -p "$ENV_FILE" "$ENV_FILE.vor-import"
+  for key in "${MIGRATE_KEYS[@]}"; do
+    value=$(env_get "$key" "$tmp/staging/env")
+    if [[ -n $value ]]; then env_set "$key" "$value"; fi
+  done
+  ok "Übernommen: ${MIGRATE_KEYS[*]} (bisherige .env in .env.vor-import)."
+  if [[ $old_domain != "$new_domain" || ${old_tls:-letsencrypt} != "${new_tls:-letsencrypt}" ]]; then
+    # Zertifikate der alten Domain nützen hier nichts; die von Caddy auf diesem Server bleiben
+    rm -rf "${tmp:?}/caddy_data"
+    install -d "$tmp/caddy_data"
+    info "Andere Domain oder Betriebsart: Zertifikate dieses Servers bleiben, die alten werden nicht übernommen."
+  fi
+  if [[ $(env_get WIKI_DRAWIO) == true ]]; then compose build drawio >/dev/null; fi
+
+  restore_apply "$tmp"
+  reload_caddy
+
+  step "Ergebnis prüfen"
+  local counts expected
+  counts=$(compose exec -T db psql -At -U wiki -d wiki -c "$COUNTS_SQL" | tr -d '\r')
+  expected=$(manifest_get counts "$manifest")
+  [[ $counts == "$expected" ]] || die "Inhalt weicht ab: erwartet $expected, eingespielt $counts."
+  # Gegen die geprüfte Kopie in $tmp (cp -a hat sie 1:1 ins Volume übernommen), nicht im Volume, das die API schon nutzt
+  attachment_check "$tmp/attachments" < <(compose exec -T db psql -At -U wiki -d wiki -c "$ATTACHMENT_FILES_SQL" | tr -d '\r')
+  ok "Inhalt wie auf dem alten Server: $counts, alle Anhänge vollständig."
+  wait_drawio
+  wait_office
+  ok "Umzug abgeschlossen. Alle Benutzer müssen sich neu anmelden."
+  info "Nächste Schritte (docs/umzug.md): sudo wikictl status, DNS umstellen, alten Server abschalten, Umzugsdatei löschen."
+  if [[ $old_domain != "$new_domain" ]]; then
+    warn "Neue Domain ($old_domain → $new_domain): Android-App und claude.ai-Connectors müssen neu verbunden werden;"
+    warn "Links aus alten Mails (Einladungen, Passwort-Reset) und Lesezeichen zeigen auf die alte Adresse."
+  fi
 }
 
 cmd_monitor() {
@@ -622,6 +995,8 @@ main() {
     snapshots) cmd_snapshots ;;
     restore) cmd_restore "$@" ;;
     restore-test) cmd_restore_test ;;
+    export) cmd_export "$@" ;;
+    import) cmd_import "$@" ;;
     monitor) cmd_monitor ;;
     ca-cert) cmd_ca_cert ;;
     help | -h | --help) usage ;;

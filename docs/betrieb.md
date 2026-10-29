@@ -12,6 +12,7 @@ Alles Wiederkehrende läuft über `wikictl` (vom Installer nach `/usr/local/bin/
 | Sicherung | `sudo wikictl backup` | täglich ca. 3:15 Uhr (`wikifordummys-backup.timer`) |
 | Test-Wiederherstellung | `sudo wikictl restore-test` | am 1. jedes Monats (`wikifordummys-restore-test.timer`) |
 | Wiederherstellung | `sudo wikictl restore <id\|latest>` | |
+| Umzug auf einen anderen Server | `sudo wikictl export --stop`, dort `sudo wikictl import <datei>` | Anleitung in [umzug.md](umzug.md) |
 | Health-Check mit Push | `sudo wikictl monitor` | alle 5 Minuten (`wikifordummys-monitor.timer`) |
 | Mailversand prüfen | `sudo wikictl mail-test --to ich@firma.de` | |
 | Weiteren Admin anlegen | `sudo wikictl create-admin --email … --name "…"` | zeigt ein Startpasswort an; `--invite` für Einladungslink per Mail |
@@ -98,6 +99,8 @@ sudo wikictl restore latest            # oder eine ID aus der Liste
 Vorher sichert `wikictl` den aktuellen Stand (Markierung `vor-wiederherstellung`, wird nicht automatisch gelöscht). Dann werden Datenbank, Anhänge und Zertifikate ersetzt; alle Benutzer müssen sich neu anmelden.
 
 ### Wiederherstellung auf einem neuen Server
+
+Für einen geplanten Umzug, ohne gemeinsames Sicherungsziel oder mit neuer Domain eignen sich `wikictl export` und `wikictl import` besser ([umzug.md](umzug.md)). Für den Ausfall des alten Servers gilt:
 
 1. Neuen Server wie in [installation.md](installation.md) aufsetzen, mit **derselben Domain** und demselben Sicherungsziel; bei der Frage nach dem Passwort der vorhandenen Sicherung das alte Passwort eingeben. Bei der Frage nach dem Administrator „nein“ wählen.
 2. Dann
