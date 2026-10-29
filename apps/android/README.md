@@ -3,8 +3,35 @@
 Android-Client für wikifordummys: Kotlin, Jetpack Compose, Material 3 (dynamische Farben ab Android 12, hell und dunkel),
 Navigation Compose. Das Projekt ist kein Teil des pnpm-Workspace (deshalb gibt es hier keine `package.json`).
 
-**Stand:** Grundgerüst. Die App fragt beim Start nach der Adresse des Wikis, lässt nur `https://` zu, prüft die Adresse
-über `GET /api/v1/health` und speichert sie in einem DataStore. Eine Anmeldung gibt es noch nicht.
+**Stand:** Adresse und Anmeldung. Die App fragt beim Start nach der Adresse des Wikis, lässt nur `https://` zu, prüft die
+Adresse über `GET /api/v1/health` und speichert sie in einem DataStore. Danach meldet sie sich per OAuth 2.1 mit PKCE
+im Browser an und zeigt die Spaces des Benutzers (nur lesend).
+
+## Anmeldung
+
+Ablauf (Server: `apps/api/src/oauth`, fester Client `APP_OAUTH_CLIENT_ID` und `APP_OAUTH_REDIRECT_URI` aus
+`packages/shared/src/index.ts`, in der App `auth/model/AppOAuth.kt`):
+
+1. „Im Browser anmelden“ erzeugt einen PKCE-Verifier (32 Bytes aus `SecureRandom`, base64url) und einen zufälligen
+   `state` und speichert beide verschlüsselt, damit sie einen Prozesstod überleben. Sie gelten für genau einen
+   Rücksprung und höchstens 30 Minuten.
+2. Der Browser öffnet `<wiki>/oauth/authorize?response_type=code&client_id=…&redirect_uri=de.wikifordummys.app:/oauth/callback&code_challenge=…&code_challenge_method=S256&state=…&resource=<wiki>/api/v1`,
+   als Custom Tab (androidx.browser), ohne Custom-Tabs-fähigen Browser über `ACTION_VIEW`. Dort meldet sich der
+   Benutzer mit Passwort und 2FA-Code an und stimmt zu (für die App höchstens 30 Tage, nur lesend).
+3. Der Rücksprung `de.wikifordummys.app:/oauth/callback?state=…&iss=…&code=…` landet in `OAuthCallbackActivity`
+   (ohne Oberfläche). Geprüft werden: laufende Anmeldung für dieses Wiki, `state` (konstantzeitig), `iss` gleich der
+   Wiki-Adresse, `error`. Rücksprünge ohne laufende Anmeldung oder mit falschem `state` werden verworfen.
+4. Tausch des Codes über `POST /api/v1/oauth/token` (Formular, `grant_type=authorization_code`, `code_verifier`,
+   `resource`). Das Access-Token (`wfd_…`, 1 h) geht als Bearer an die REST-API, das Refresh-Token (`wfr_…`) wird bei
+   jeder Erneuerung ausgetauscht.
+5. Antwortet die API mit 401, erneuert `TokenAuthenticator` genau einmal und wiederholt die Anfrage einmal. Parallele
+   401 teilen sich eine Erneuerung (Mutex), ein altes Refresh-Token wird nie erneut vorgelegt. Bei `invalid_grant`
+   löscht die App die Tokens und zeigt wieder die Anmeldung.
+6. „Abmelden“ widerruft die Zustimmung über `POST /api/v1/oauth/revoke` und löscht die Tokens lokal, auch wenn der
+   Widerruf scheitert.
+
+App-Tokens gelten am Server nur für GET auf Spaces, Seiten, Suche, Anhänge und `GET /me`; 403 heißt „für die App nicht
+freigegeben“.
 
 ## Voraussetzungen
 
@@ -27,7 +54,7 @@ nicht eingecheckt).
 ```bash
 cd apps/android
 ./gradlew assembleDebug          # APK unter app/build/outputs/apk/debug/
-./gradlew testDebugUnitTest      # Unit-Tests (JVM, ohne Gerät)
+./gradlew testDebugUnitTest      # Unit-Tests (JVM, ohne Gerät; MockWebServer für Token-Endpunkt und API)
 ./gradlew lintDebug              # Android Lint
 ./gradlew installDebug           # auf ein verbundenes Gerät oder einen Emulator installieren
 ```
@@ -44,7 +71,17 @@ app/src/main/java/de/wikifordummys/app/
   server/model/    Adressprüfung (WikiUrlValidator), Ergebnis der Serverprüfung
   server/data/     DataStore für die Adresse, Health-Check per Retrofit/OkHttp
   server/ui/       Startbildschirm „Wiki-Adresse eingeben“ mit ViewModel
-  home/ui/         Platzhalter nach dem Speichern der Adresse
+  auth/model/      PKCE, Rücksprung-Parser, OAuth-Konstanten, Ergebnisse
+  auth/data/       Token-Endpunkt, Repository (Anmeldung, Erneuerung, Abmeldung), Bearer-Interceptor, Authenticator,
+                   verschlüsselte Speicher für Sitzung und laufende Anmeldung
+  auth/ui/         Bildschirm „Anmelden“, Öffnen des Browsers (Custom Tab oder ACTION_VIEW)
+  auth/OAuthCallbackActivity.kt   nimmt den Rücksprung aus dem Browser an
+  core/net/        gemeinsamer OkHttp-Client, Größengrenze für Antworten, Origin-Vergleich
+  core/security/   AES-GCM (TokenCipher) mit Schlüssel aus dem Android Keystore
+  core/storage/    verschlüsselte Werte in einem Preferences-DataStore
+  core/api/        Zuordnung von HTTP-Status und Fehlern der REST-API
+  home/            Startbildschirm nach der Anmeldung: „Angemeldet als …“, Spaces, Abmelden
+  navigation/      Start nach gespeicherter Adresse und Sitzung (AppStartViewModel)
 ```
 
 Texte stehen in `app/src/main/res/values/strings.xml` (Deutsch als Standard).
@@ -56,6 +93,16 @@ Texte stehen in `app/src/main/res/values/strings.xml` (Deutsch als Standard).
   App heraus noch nicht erreichbar.
 - Kein Backup: `allowBackup="false"` und Regeln, die alle Daten von Cloud-Backup und Geräteübertragung ausschließen.
 - Der Health-Check folgt keinen Weiterleitungen und sendet keine Zugangsdaten. Es gibt keinen Logging-Interceptor.
+- Jede Antwort, auch eine Fehlerantwort, ist über einen gemeinsamen Interceptor (`ResponseSizeLimitInterceptor`)
+  größenbegrenzt: 2 MiB für die REST-API, 16 KiB am Token-Endpunkt.
+- Tokens und die laufende Anmeldung liegen nur verschlüsselt im DataStore `auth` (AES-256-GCM, Schlüssel im Android
+  Keystore, nicht exportierbar; der Name des Eintrags ist zusätzliche authentisierte Daten). Sie werden nie geloggt;
+  `toString()` der Modelle verbirgt sie.
+- Der Bearer geht nur an die gespeicherte Wiki-Origin (Schema, Host, Port), ein von außen gesetzter
+  `Authorization`-Header wird entfernt. Token-Endpunkt und API-Client folgen keinen Weiterleitungen.
+- Der Rücksprung nutzt ein privates Schema (`de.wikifordummys.app:`). Das kann auch eine fremde App beanspruchen
+  (RFC 8252, 8.6); dagegen schützen PKCE, `state`, `iss` und die kurze Zustimmung (30 Tage). Android wertet im
+  Intent-Filter Pfade ohne Host nicht aus, deshalb prüft die App Schema, Pfad und Parameter selbst.
 - Keine Geheimnisse im Repo. Für Release-Builds ist keine Signierung konfiguriert; Keystore und Passwörter kommen später aus
   Umgebungsvariablen oder `local.properties`, nie aus dem Repo. `*.jks` und `*.keystore` stehen in `.gitignore`.
 

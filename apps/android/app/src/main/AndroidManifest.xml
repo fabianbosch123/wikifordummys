@@ -3,12 +3,25 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Ab Android 11: Browser finden, die Custom Tabs können, und Browser für den Fallback über ACTION_VIEW. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
+
     <!--
       Sicherheit:
       - allowBackup aus; zusätzlich schließen die Regeln für Android 12+ (dataExtractionRules) und ältere Versionen
         (fullBackupContent) alle Daten von Cloud-Backup und Geräteübertragung aus. Später gespeicherte Tokens landen so
         nie in einem Backup.
       - Nur HTTPS: usesCleartextTraffic aus und eine Network Security Config ohne Ausnahmen.
+      - Tokens liegen nur verschlüsselt (AES-GCM, Schlüssel im Android Keystore) im DataStore "auth".
     -->
     <application
         android:name=".WikiApplication"
@@ -22,12 +35,36 @@
         android:theme="@style/Theme.WikiForDummys"
         android:usesCleartextTraffic="false">
 
+        <!-- singleTop: Der Rücksprung aus dem Browser holt die laufende Instanz nach vorn, statt eine zweite zu starten. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Rücksprung der OAuth-Anmeldung (APP_OAUTH_REDIRECT_URI = de.wikifordummys.app:/oauth/callback). Exportiert, weil
+          der Browser sie aufruft; ohne Oberfläche, nicht im Verlauf, in der Aufgabe der App (singleTask), auch wenn der
+          Browser in einer eigenen Aufgabe läuft. Android wertet Pfadangaben im Filter ohne Host nicht aus, deshalb
+          filtert er nur nach dem Schema; Pfad, state und iss prüft der Login-Ablauf (OAuthCallback, OAuthAuthRepository).
+          Das private Schema kann auch eine andere App beanspruchen (RFC 8252, 8.6): Dagegen schützen PKCE und state.
+        -->
+        <activity
+            android:name=".auth.OAuthCallbackActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="de.wikifordummys.app" />
             </intent-filter>
         </activity>
     </application>
