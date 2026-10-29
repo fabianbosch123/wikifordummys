@@ -1,7 +1,35 @@
-import { expect, test } from '@playwright/test';
-import { acceptInviteAndSetup2fa, createAdminViaCli, run } from '../helpers';
+import { expect, Page, test } from '@playwright/test';
+import { authenticator } from 'otplib';
+import { createAdminWithPassword, PASSWORD, run } from '../helpers';
 
 const spaceKey = `F${run.slice(-6).toUpperCase().replace(/[^A-Z0-9]/g, 'X')}`;
+
+/**
+ * Anmeldung mit Startpasswort statt Einladung: Einladungen sind je Adresse auf 30 Abrufe pro Stunde begrenzt,
+ * und die übrigen Tests brauchen diese Abrufe schon.
+ */
+async function loginAsNewAdmin(page: Page) {
+  const email = `fonts-${run}@example.de`;
+  const startPassword = createAdminWithPassword(email);
+  await page.goto('/login');
+  await page.getByLabel('E-Mail').fill(email);
+  await page.getByLabel('Passwort').fill(startPassword);
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await expect(page).toHaveURL(/\/setup-2fa$/);
+  const secret = (await page.getByTestId('totp-secret').textContent())!.trim();
+  await page.getByLabel('6-stelliger Code').fill(authenticator.generate(secret));
+  await page.getByRole('button', { name: 'Bestätigen' }).click();
+  await page.getByLabel('Ich habe die Codes gesichert.').check();
+  await page.getByRole('button', { name: 'Weiter' }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await page.getByLabel('Startpasswort').fill(startPassword);
+  await page.getByLabel('Neues Passwort', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Neues Passwort wiederholen').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Passwort ändern' }).click();
+  await expect(page.getByRole('heading', { name: 'Mein Konto' })).toBeVisible();
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /^Willkommen/ })).toBeVisible();
+}
 
 test('Schriftart im Editor wählen; die freie Ersatzschrift kommt vom eigenen Server', async ({ page }) => {
   const fontRequests: string[] = [];
@@ -9,7 +37,7 @@ test('Schriftart im Editor wählen; die freie Ersatzschrift kommt vom eigenen Se
     if (r.resourceType() === 'font') fontRequests.push(r.url());
   });
 
-  await acceptInviteAndSetup2fa(page, createAdminViaCli(`fonts-${run}@example.de`));
+  await loginAsNewAdmin(page);
   await page.getByLabel('Schlüssel').fill(spaceKey);
   await page.getByLabel('Name', { exact: true }).fill('Schriften');
   await page.getByRole('button', { name: 'Space anlegen' }).click();
