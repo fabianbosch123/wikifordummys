@@ -5,7 +5,7 @@ name: wikifordummys-dev
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16.15@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
     environment:
       POSTGRES_DB: wiki
       POSTGRES_USER: wiki
@@ -14,7 +14,7 @@ services:
     volumes: [devpg:/var/lib/postgresql/data]
 
   redis:
-    image: redis:7
+    image: redis:7.4.12@sha256:b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5
     ports: ["127.0.0.1:6379:6379"]
 
   # Weboberfläche unter http://localhost:8025 zeigt alle verschickten Mails

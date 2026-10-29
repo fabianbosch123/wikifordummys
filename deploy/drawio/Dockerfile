@@ -2,7 +2,7 @@
 # Kein Java/Tomcat: Caddy liefert nur die Dateien aus (wenige MB Arbeitsspeicher). Die App läuft komplett im Browser,
 # eingebettet im Seiteneditor; Zeichnungen speichert das Wiki selbst als Anhang (PNG mit eingebetteten draw.io-Daten).
 # Neue Version: DRAWIO_VERSION und DRAWIO_SHA256 (sha256sum von draw.war) gemeinsam ändern.
-ARG CADDY_IMAGE=caddy:2
+ARG CADDY_IMAGE=caddy:2.11.7@sha256:5e5286cb37d44086d651a5363f05f43a692ce4d649d88fb1bd844579f45fa9e8
 
 FROM ${CADDY_IMAGE} AS fetch
 ARG DRAWIO_VERSION=32.4.1
