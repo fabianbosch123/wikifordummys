@@ -9,6 +9,8 @@ export const e2eEnv: Record<string, string> = {
   SESSION_SECRET: 'e2e-secret-e2e-secret-e2e-secret-1234',
   COOKIE_SECURE: 'false',
   TRUST_PROXY: '1',
+  // Alle Tests laufen von derselben Adresse und legen ihre Admins meist per Einladung an; das Limit von 30 je Stunde reicht dafür nicht
+  RATE_INVITE_PER_HOUR: '1000',
   ATTACHMENTS_DIR: process.env.E2E_ATTACHMENTS_DIR ?? `${process.env.TMPDIR ?? '/tmp'}/wiki-e2e-attachments`,
   // Office-Editor: tests/office.spec.ts ersetzt Editor-Skript und Editor-Server durch Attrappen
   OFFICE_ENABLED: 'true',

@@ -1,4 +1,4 @@
-import { COLUMN_WIDTH, drawingSrc, IMAGE_SIZE, isSafeImageSrc, isSafeLinkHref, tableLayout, type DocMark, type DocNode } from '@wiki/shared';
+import { COLUMN_WIDTH, drawingSrc, IMAGE_SIZE, isFontFamilyId, isSafeImageSrc, isSafeLinkHref, tableLayout, type DocMark, type DocNode } from '@wiki/shared';
 import { Fragment, ReactNode } from 'react';
 
 /**
@@ -29,6 +29,9 @@ function renderMarks(text: string, marks: DocMark[] = []): ReactNode {
         return <u>{inner}</u>;
       case 'code':
         return <code>{inner}</code>;
+      case 'font':
+        // Nur Kennungen aus der Liste; die Schrift selbst setzt fonts.css
+        return isFontFamilyId(mark.attrs?.family) ? <span data-font={mark.attrs.family}>{inner}</span> : inner;
       case 'link': {
         const href = mark.attrs?.href;
         if (!isSafeLinkHref(href)) return inner;

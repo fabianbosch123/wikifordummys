@@ -20,6 +20,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 | --- | --- |
 | [docs/installation.md](docs/installation.md) | Voraussetzungen, Ablauf des Installers, Betriebsarten mit Proxy-Beispielen, Mail-Anbieter, Installation ohne Rückfragen oder von Hand |
 | [docs/betrieb.md](docs/betrieb.md) | `wikictl`, Office-Editor, draw.io, Updates, Sicherung und Wiederherstellung, Überwachung, fail2ban, Platte voll |
+| [docs/schriftarten.md](docs/schriftarten.md) | Schriftarten im Editor, freie Ersatzschriften, Lizenzübersicht |
 | [docs/umzug.md](docs/umzug.md) | Umzug auf einen anderen Server mit `wikictl export` und `import`, auch mit neuer Domain |
 | [docs/mcp.md](docs/mcp.md) | MCP-Server einrichten (claude.ai, Claude Code, Claude Desktop), Werkzeuge, Fehlersuche |
 | [docs/go-live.md](docs/go-live.md) | Abnahme-Checkliste und Pilotbetrieb |
@@ -56,6 +57,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 - **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite. Archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus. Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`).
 - **Seitenbaum** beliebig tief, mit Brotkrumen, in einer Seitenleiste links (etwa 20 % der Breite); der Inhalt nutzt die volle restliche Breite. Seiten lassen sich per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
 - **Editor (TipTap):** Überschriften, Fett, Kursiv, Unterstrichen, Durchgestrichen, Code, Listen, Zitate, Code-Blöcke, Trennlinien, Tabellen, Bilder, Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Bilder lassen sich an den Ecken, Tabellenspalten am Spaltenrand in der Größe ziehen. Gespeichert wird JSON, kein HTML.
+- **Schriftarten:** Auswahl in der Werkzeugleiste mit den zehn gängigsten Schriften (Arial, Helvetica, Times New Roman, Calibri, Cambria, Verdana, Tahoma, Georgia, Segoe UI, Courier New). Ist die Schrift beim Lesenden installiert, nimmt der Browser sie; sonst liefert das Wiki eine freie, möglichst metrisch kompatible Ersatzschrift selbst aus (z. B. Carlito für Calibri), ohne fremde Server. Auch im Office-Editor verfügbar. Lizenzen und Quellen in [docs/schriftarten.md](docs/schriftarten.md).
 - **Drag & Drop und Zwischenablage:** Bilder und Dateien lassen sich in den Text ziehen oder einfügen. Bilder erscheinen als Bild, andere Dateien als Link auf den Anhang; bei neuen Seiten wird beim Anlegen hochgeladen.
 - **Versionen:** Jede Speicherung ist eine unveränderliche Version. Verlauf mit zeilenweisem Vergleich zweier Versionen; alte Versionen lassen sich ansehen und als neue Version wiederherstellen.
 - **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.

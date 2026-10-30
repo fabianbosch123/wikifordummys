@@ -45,6 +45,8 @@ const schema = z
       .positive()
       .default(30),
     RATE_RESET_PER_HOUR: z.coerce.number().int().positive().default(3),
+    /** Abrufe und Annahmen von Einladungslinks je IP und Stunde */
+    RATE_INVITE_PER_HOUR: z.coerce.number().int().positive().default(30),
     RATE_API_PER_MINUTE: z.coerce.number().int().positive().default(300),
     /** MCP-Server: Aufrufe je Token und Minute sowie ändernde Aufrufe je Token und Stunde */
     RATE_MCP_PER_MINUTE: z.coerce.number().int().positive().default(120),

@@ -54,6 +54,15 @@ describe('Inhaltsprüfung (S6)', () => {
     },
   );
 
+  it('lässt nur Schriftarten aus der Liste zu und speichert nur deren Kennung', () => {
+    const out = sanitizeDoc(doc(p('x', [{ type: 'font', attrs: { family: 'calibri', style: 'color:red' } }])));
+    expect(out.content?.[0].content?.[0].marks).toEqual([{ type: 'font', attrs: { family: 'calibri' } }]);
+    for (const family of ['Comic Sans MS', "arial; background:url(//evil)", '__proto__', 'constructor', undefined, 1, ['arial']]) {
+      const cleaned = sanitizeDoc(doc(p('x', [{ type: 'bold' }, { type: 'font', attrs: { family } }])));
+      expect(cleaned.content?.[0].content?.[0]).toEqual({ type: 'text', text: 'x', marks: [{ type: 'bold' }] });
+    }
+  });
+
   it.each([['iframe'], ['script'], ['html'], ['__proto__'], ['constructor']])('lehnt unbekannte Knoten ab: %s', (type) => {
     expect(() => sanitizeDoc(doc({ type }))).toThrow(ContentError);
   });

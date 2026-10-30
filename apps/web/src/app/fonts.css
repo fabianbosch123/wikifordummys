@@ -1,0 +1,49 @@
+/*
+ * Schriftarten im Editor (FONT_FAMILIES in packages/shared/src/content.ts).
+ * Je Schrift steht zuerst der gewohnte Name: Ist die Schrift auf dem Rechner installiert, nimmt der Browser sie.
+ * Sonst lädt er die freie, möglichst metrisch kompatible Ersatzschrift vom eigenen Server (keine fremden Server, DSGVO).
+ * Die proprietären Schriften selbst liefert das Wiki nie aus. Dateien, Lizenzen und Quellen: fonts/ und docs/schriftarten.md.
+ * Der Browser lädt eine Datei erst, wenn Text in dieser Schrift auf der Seite steht.
+ */
+
+@font-face { font-family: 'Arimo'; src: url('../../../../fonts/arimo/Arimo-Variable.ttf') format('truetype'); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Arimo'; src: url('../../../../fonts/arimo/Arimo-Italic-Variable.ttf') format('truetype'); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gelasio'; src: url('../../../../fonts/gelasio/Gelasio-Variable.ttf') format('truetype'); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gelasio'; src: url('../../../../fonts/gelasio/Gelasio-Italic-Variable.ttf') format('truetype'); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Open Sans'; src: url('../../../../fonts/opensans/OpenSans-Variable.ttf') format('truetype'); font-weight: 300 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Open Sans'; src: url('../../../../fonts/opensans/OpenSans-Italic-Variable.ttf') format('truetype'); font-weight: 300 800; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('../../../../fonts/tinos/Tinos-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('../../../../fonts/tinos/Tinos-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('../../../../fonts/tinos/Tinos-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('../../../../fonts/tinos/Tinos-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Cousine'; src: url('../../../../fonts/cousine/Cousine-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Cousine'; src: url('../../../../fonts/cousine/Cousine-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Cousine'; src: url('../../../../fonts/cousine/Cousine-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Cousine'; src: url('../../../../fonts/cousine/Cousine-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('../../../../fonts/carlito/Carlito-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('../../../../fonts/carlito/Carlito-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('../../../../fonts/carlito/Carlito-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('../../../../fonts/carlito/Carlito-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Caladea'; src: url('../../../../fonts/caladea/Caladea-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Caladea'; src: url('../../../../fonts/caladea/Caladea-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Caladea'; src: url('../../../../fonts/caladea/Caladea-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Caladea'; src: url('../../../../fonts/caladea/Caladea-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans'; src: url('../../../../fonts/dejavu/DejaVuSans.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans'; src: url('../../../../fonts/dejavu/DejaVuSans-Oblique.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans'; src: url('../../../../fonts/dejavu/DejaVuSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans'; src: url('../../../../fonts/dejavu/DejaVuSans-BoldOblique.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans Condensed'; src: url('../../../../fonts/dejavu/DejaVuSansCondensed.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans Condensed'; src: url('../../../../fonts/dejavu/DejaVuSansCondensed-Oblique.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans Condensed'; src: url('../../../../fonts/dejavu/DejaVuSansCondensed-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DejaVu Sans Condensed'; src: url('../../../../fonts/dejavu/DejaVuSansCondensed-BoldOblique.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+
+[data-font='arial'] { font-family: Arial, Arimo, 'Liberation Sans', sans-serif; }
+[data-font='helvetica'] { font-family: Helvetica, 'Helvetica Neue', Arimo, 'Liberation Sans', sans-serif; }
+[data-font='times-new-roman'] { font-family: 'Times New Roman', Tinos, 'Liberation Serif', serif; }
+[data-font='calibri'] { font-family: Calibri, Carlito, sans-serif; }
+[data-font='cambria'] { font-family: Cambria, Caladea, serif; }
+[data-font='verdana'] { font-family: Verdana, 'DejaVu Sans', sans-serif; }
+[data-font='tahoma'] { font-family: Tahoma, 'DejaVu Sans Condensed', sans-serif; }
+[data-font='georgia'] { font-family: Georgia, Gelasio, serif; }
+[data-font='segoe-ui'] { font-family: 'Segoe UI', 'Open Sans', sans-serif; }
+[data-font='courier-new'] { font-family: 'Courier New', Cousine, 'Liberation Mono', monospace; }
