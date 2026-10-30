@@ -3,6 +3,7 @@
 // Meilenstein 3: Space-Rollen, Seiteneinschränkungen, Anhänge, Volltextsuche.
 // Meilenstein 4: Einstellungen aus der Administration (SMTP).
 // MCP-Server: API-Token je Benutzer für Claude und andere MCP-Clients, OAuth für claude.ai.
+// Darstellung (hell/dunkel/System) je Benutzer.
 
 generator client {
   provider      = "prisma-client-js"
@@ -20,29 +21,37 @@ enum UserStatus {
   deactivated
 }
 
+/// Darstellung der Weboberfläche; system folgt der Einstellung des Betriebssystems
+enum ThemePreference {
+  system
+  light
+  dark
+}
+
 enum GlobalPermissionType {
   admin
   create_space
 }
 
 model User {
-  id                 String     @id @default(uuid()) @db.Uuid
-  email              String     @unique
-  displayName        String     @map("display_name")
-  passwordHash       String?    @map("password_hash")
+  id                 String          @id @default(uuid()) @db.Uuid
+  email              String          @unique
+  displayName        String          @map("display_name")
+  passwordHash       String?         @map("password_hash")
   /// AES-256-GCM-verschlüsselt (S2)
-  totpSecret         String?    @map("totp_secret")
-  totpEnabled        Boolean    @default(false) @map("totp_enabled")
+  totpSecret         String?         @map("totp_secret")
+  totpEnabled        Boolean         @default(false) @map("totp_enabled")
   /// Zuletzt verwendeter TOTP-Zeitschritt, damit ein Code nur einmal gilt (S2)
-  totpLastStep       Int?       @map("totp_last_step")
+  totpLastStep       Int?            @map("totp_last_step")
   /// Startpasswort aus der Kommandozeile: muss nach der Anmeldung geändert werden
-  mustChangePassword Boolean    @default(false) @map("must_change_password")
-  status             UserStatus @default(invited)
-  failedLogins       Int        @default(0) @map("failed_logins")
-  lockedUntil        DateTime?  @map("locked_until")
-  lastLoginAt        DateTime?  @map("last_login_at")
-  createdAt          DateTime   @default(now()) @map("created_at")
-  updatedAt          DateTime   @updatedAt @map("updated_at")
+  mustChangePassword Boolean         @default(false) @map("must_change_password")
+  theme              ThemePreference @default(system)
+  status             UserStatus      @default(invited)
+  failedLogins       Int             @default(0) @map("failed_logins")
+  lockedUntil        DateTime?       @map("locked_until")
+  lastLoginAt        DateTime?       @map("last_login_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
 
   recoveryCodes      RecoveryCode[]
   invitations        Invitation[]        @relation("InvitationUser")

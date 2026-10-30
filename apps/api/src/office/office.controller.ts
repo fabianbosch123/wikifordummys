@@ -10,6 +10,11 @@ class EditorQuery {
   @IsOptional()
   @IsIn(['edit', 'view'])
   mode?: 'edit' | 'view';
+
+  /** Aufgelöste Darstellung der Weboberfläche (System-Einstellung kennt nur der Browser) */
+  @IsOptional()
+  @IsIn(['light', 'dark'])
+  theme?: 'light' | 'dark';
 }
 
 class NewOfficeFileBody {
@@ -29,7 +34,7 @@ export class OfficeController {
   /** Editor-Konfiguration für die Weboberfläche */
   @Get('attachments/:id/office')
   editor(@Param('id', new ParseUUIDPipe()) id: string, @Query() q: EditorQuery, @Auth() ctx: AuthContext, @Req() req: WikiRequest) {
-    return this.office.editorConfig(ctx, id, q.mode ?? 'view', clientIp(req));
+    return this.office.editorConfig(ctx, id, q.mode ?? 'view', clientIp(req), q.theme ?? 'light');
   }
 
   /** Leeres Word-, Excel- oder PowerPoint-Dokument als Anhang der Seite anlegen (aus dem Seiteneditor) */

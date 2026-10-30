@@ -58,7 +58,7 @@ export class OfficeService {
   }
 
   /** Signierte Konfiguration für den Editor; Bearbeiten nur mit Bearbeiten-Recht auf der Seite */
-  async editorConfig(ctx: AuthContext, id: string, mode: 'edit' | 'view', ip: string): Promise<OfficeEditorDto> {
+  async editorConfig(ctx: AuthContext, id: string, mode: 'edit' | 'view', ip: string, theme: 'light' | 'dark' = 'light'): Promise<OfficeEditorDto> {
     this.requireEnabled();
     const { attachment, access } = await this.attachments.load(ctx.user, id, mode);
     const format = officeFormat(attachment.filename);
@@ -87,8 +87,9 @@ export class OfficeService {
         region: 'de-DE',
         callbackUrl: `${api}/api/v1/office/callback`,
         user: { id: ctx.user.id, name: ctx.user.displayName },
-        // Speichern-Knopf legt sofort eine Fassung an; Zwischenstände der automatischen Speicherung nicht
-        customization: { forcesave: true, autosave: true, uiTheme: 'theme-light' },
+        // Speichern-Knopf legt sofort eine Fassung an; Zwischenstände der automatischen Speicherung nicht.
+        // Oberfläche passend zur Darstellung des Wikis (hell oder dunkel)
+        customization: { forcesave: true, autosave: true, uiTheme: theme === 'dark' ? 'theme-dark' : 'theme-light' },
       },
     };
     config.token = signJwt(config, this.secret);

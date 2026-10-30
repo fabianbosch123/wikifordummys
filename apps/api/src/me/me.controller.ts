@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req } from '@nestjs/common';
-import { PASSWORD_MAX_LENGTH, type MeDto, type SessionInfoDto } from '@wiki/shared';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Req } from '@nestjs/common';
+import { PASSWORD_MAX_LENGTH, THEME_PREFERENCES, type MeDto, type SessionInfoDto, type ThemePreference } from '@wiki/shared';
 import { Transform } from 'class-transformer';
-import { IsString, Length, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsString, Length, Matches, MaxLength } from 'class-validator';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
@@ -15,6 +15,11 @@ class UpdateMeDto {
   @IsString()
   @Length(1, 100)
   displayName: string;
+}
+
+class ThemeDto {
+  @IsIn(THEME_PREFERENCES)
+  theme: ThemePreference;
 }
 
 class ChangePasswordDto {
@@ -52,6 +57,13 @@ export class MeController {
   async update(@Body() dto: UpdateMeDto, @Auth() ctx: AuthContext): Promise<MeDto> {
     await this.prisma.user.update({ where: { id: ctx.user.id }, data: { displayName: dto.displayName } });
     return { ...meDto(ctx.user), displayName: dto.displayName };
+  }
+
+  /** Darstellung hell, dunkel oder wie das Betriebssystem; gilt für das Konto auf allen Geräten */
+  @Put('theme')
+  async setTheme(@Body() dto: ThemeDto, @Auth() ctx: AuthContext): Promise<MeDto> {
+    await this.prisma.user.update({ where: { id: ctx.user.id }, data: { theme: dto.theme } });
+    return { ...meDto(ctx.user), theme: dto.theme };
   }
 
   @AllowPendingPasswordChange()

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { ReactNode } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { AuthProvider } from '@/lib/auth';
+import { THEME_COOKIE, themeAttribute } from '@/lib/theme';
 import './fonts.css';
 import './globals.css';
 
@@ -18,8 +19,10 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await headers();
+  // Darstellung des Benutzers schon im ersten HTML, damit beim Laden nichts hell aufblitzt
+  const theme = themeAttribute((await cookies()).get(THEME_COOKIE)?.value);
   return (
-    <html lang="de">
+    <html lang="de" data-theme={theme}>
       <body>
         <AuthProvider>
           <AppShell>{children}</AppShell>

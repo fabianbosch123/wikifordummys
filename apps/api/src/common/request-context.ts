@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { MeDto } from '@wiki/shared';
+import type { MeDto, ThemePreference } from '@wiki/shared';
 import type { ActiveSession } from '../auth/session.service';
 
 export interface AuthUser {
@@ -10,6 +10,7 @@ export interface AuthUser {
   canCreateSpace: boolean;
   totpEnabled: boolean;
   mustChangePassword: boolean;
+  theme: ThemePreference;
   /** Alle Gruppen des Benutzers einschließlich der impliziten Gruppe alle-benutzer */
   groupIds: string[];
 }

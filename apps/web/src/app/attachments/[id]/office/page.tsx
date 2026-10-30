@@ -1,6 +1,6 @@
 'use client';
 
-import type { OfficeEditorDto } from '@wiki/shared';
+import type { OfficeEditorDto, ThemePreference } from '@wiki/shared';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
+import { resolveTheme } from '@/lib/theme';
 
 interface DocEditor {
   destroyEditor(): void;
@@ -35,10 +36,11 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-function OfficeEditor() {
+function OfficeEditor({ theme }: { theme: ThemePreference }) {
   const { id } = useParams<{ id: string }>();
   const mode = useSearchParams().get('mode') === 'edit' ? 'edit' : 'view';
-  const editor = useApiData<OfficeEditorDto>(`/attachments/${id}/office?mode=${mode}`);
+  // Der Editor kennt nur hell oder dunkel; „System“ löst der Browser auf
+  const editor = useApiData<OfficeEditorDto>(`/attachments/${id}/office?mode=${mode}&theme=${resolveTheme(theme)}`);
   const instance = useRef<DocEditor | null>(null);
   const [error, setError] = useState('');
 
@@ -98,5 +100,5 @@ function OfficeEditor() {
 }
 
 export default function OfficePage() {
-  return <RequireAuth>{() => <OfficeEditor />}</RequireAuth>;
+  return <RequireAuth>{(user) => <OfficeEditor theme={user.theme} />}</RequireAuth>;
 }
