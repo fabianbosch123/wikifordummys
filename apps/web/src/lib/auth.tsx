@@ -1,14 +1,17 @@
 'use client';
 
-import type { MeDto, SessionStateDto } from '@wiki/shared';
+import type { MeDto, SessionStateDto, ThemePreference } from '@wiki/shared';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from './api';
+import { applyTheme } from './theme';
 
 interface AuthState {
   state: SessionStateDto | null;
   refresh: () => Promise<SessionStateDto>;
   logout: () => Promise<void>;
+  /** Darstellung im Konto speichern und sofort anwenden */
+  setTheme: (theme: ThemePreference) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -25,13 +28,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setState({ authenticated: false, stage: null, user: null });
+    // Die Darstellung gehört zum Konto; der nächste Benutzer an diesem Browser startet mit der System-Einstellung
+    applyTheme('system');
   }, []);
+
+  const setTheme = useCallback(
+    async (theme: ThemePreference) => {
+      const previous = state?.user?.theme ?? 'system';
+      const show = (t: ThemePreference) => setState((prev) => (prev?.user ? { ...prev, user: { ...prev.user, theme: t } } : prev));
+      // Sofort anzeigen, bei Fehler zurück
+      show(theme);
+      try {
+        await api<MeDto>('/me/theme', { method: 'PUT', body: { theme } });
+      } catch (err) {
+        show(previous);
+        throw err;
+      }
+    },
+    [state?.user?.theme],
+  );
 
   useEffect(() => {
     refresh().catch(() => setState({ authenticated: false, stage: null, user: null }));
   }, [refresh]);
 
-  return <AuthContext.Provider value={{ state, refresh, logout }}>{children}</AuthContext.Provider>;
+  // Nach der Anmeldung gilt die im Konto gespeicherte Darstellung, auch auf einem neuen Gerät
+  const theme = state?.user?.theme;
+  useEffect(() => {
+    if (theme) applyTheme(theme);
+  }, [theme]);
+
+  return <AuthContext.Provider value={{ state, refresh, logout, setTheme }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

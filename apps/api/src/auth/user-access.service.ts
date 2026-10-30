@@ -29,6 +29,7 @@ export class UserAccessService {
       displayName: user.displayName,
       totpEnabled: user.totpEnabled,
       mustChangePassword: user.mustChangePassword,
+      theme: user.theme,
       isAdmin: perms.has('admin'),
       canCreateSpace: perms.has('admin') || perms.has('create_space'),
       groupIds: groups.map((g) => g.id),

@@ -128,6 +128,15 @@ describe('Office-Editor', () => {
     expect((await editorConfig(anna, doc.body.id, 'edit')).body.error.code).toBe('VIEW_ONLY');
   });
 
+  it('übernimmt die helle oder dunkle Darstellung der Weboberfläche', async () => {
+    const a = await uploadDocx();
+    const theme = async (query: string) => (await anna.client.get(`/attachments/${a.id}/office?mode=view${query}`)).body.config?.editorConfig?.customization?.uiTheme;
+    expect(await theme('')).toBe('theme-light');
+    expect(await theme('&theme=light')).toBe('theme-light');
+    expect(await theme('&theme=dark')).toBe('theme-dark');
+    expect((await anna.client.get(`/attachments/${a.id}/office?mode=view&theme=neon`)).status).toBe(400);
+  });
+
   it('der Editor-Server holt die Datei nur mit gültigem Link', async () => {
     const a = await uploadDocx();
     const { config } = (await editorConfig(anna, a.id, 'view')).body as OfficeEditorDto;

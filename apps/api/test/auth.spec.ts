@@ -377,6 +377,28 @@ describe('Sitzungen (S4)', () => {
   });
 });
 
+describe('Darstellung je Benutzer', () => {
+  it('speichert hell, dunkel oder System im Konto und liefert sie nach erneuter Anmeldung', async () => {
+    const anna = await createUser(ctx, 'anna@example.de');
+    const bernd = await createUser(ctx, 'bernd@example.de');
+    expect((await anna.client.get('/me')).body.theme).toBe('system');
+
+    const res = await anna.client.put('/me/theme', { theme: 'dark' });
+    expect(res.status).toBe(200);
+    expect(res.body.theme).toBe('dark');
+    // Gilt für das Konto, also auch in einer neuen Sitzung auf einem anderen Gerät
+    const other = await login(ctx, anna);
+    expect((await other.get('/auth/session')).body.user.theme).toBe('dark');
+    // Andere Benutzer behalten ihre eigene Einstellung
+    expect((await bernd.client.get('/me')).body.theme).toBe('system');
+
+    expect((await anna.client.put('/me/theme', { theme: 'pink' })).status).toBe(400);
+    expect((await anna.client.put('/me/theme', {})).status).toBe(400);
+    await anna.client.put('/me/theme', { theme: 'light' }).expect(200);
+    expect((await anna.client.get('/me')).body.theme).toBe('light');
+  });
+});
+
 describe('CSRF (S5)', () => {
   it('lehnt ändernde Anfragen ohne Token ab', async () => {
     const account = await createUser(ctx, 'anna@example.de');

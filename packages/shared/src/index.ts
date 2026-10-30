@@ -28,6 +28,10 @@ export type UserStatus = 'invited' | 'active' | 'deactivated';
 /** password = Passwort geprüft, 2FA fehlt; totp_setup = 2FA muss eingerichtet werden; full = voll angemeldet */
 export type SessionStage = 'password' | 'totp_setup' | 'full';
 
+/** Darstellung der Weboberfläche je Benutzer; system folgt prefers-color-scheme */
+export const THEME_PREFERENCES = ['system', 'light', 'dark'] as const;
+export type ThemePreference = (typeof THEME_PREFERENCES)[number];
+
 export interface MeDto {
   id: string;
   email: string;
@@ -38,6 +42,7 @@ export interface MeDto {
   totpEnabled: boolean;
   /** Startpasswort aus der Kommandozeile: vor allem anderen ändern */
   mustChangePassword: boolean;
+  theme: ThemePreference;
 }
 
 export interface SessionStateDto {

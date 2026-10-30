@@ -1,29 +1,24 @@
+/*
+ * Darstellung hell/dunkel: Farben mit light-dark(), welche Hälfte gilt, entscheidet color-scheme.
+ * Standard folgt dem Betriebssystem; data-theme am <html> (Einstellung im Konto) legt hell oder dunkel fest.
+ */
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --text: #1d2330;
-  --muted: #5d6676;
-  --border: #dde1e7;
-  --primary: #1f5fbf;
-  --primary-hover: #184d9c;
-  --danger: #b42318;
-  --success: #1a7f37;
+  color-scheme: light dark;
+  --bg: light-dark(#f6f7f9, #14171c);
+  --surface: light-dark(#ffffff, #1c2027);
+  --text: light-dark(#1d2330, #e6e9ee);
+  --muted: light-dark(#5d6676, #9aa3b2);
+  --border: light-dark(#dde1e7, #2e343e);
+  --primary: light-dark(#1f5fbf, #5b9bff);
+  --primary-hover: light-dark(#184d9c, #7cb0ff);
+  /* Schrift auf --primary (Knöpfe); im Dunkeln dunkel, weil Weiß auf dem hellen Blau zu wenig Kontrast hat */
+  --on-primary: light-dark(#ffffff, #0b1220);
+  --danger: light-dark(#b42318, #ff7b72);
+  --success: light-dark(#1a7f37, #56d364);
   --radius: 8px;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171c;
-    --surface: #1c2027;
-    --text: #e6e9ee;
-    --muted: #9aa3b2;
-    --border: #2e343e;
-    --primary: #5b9bff;
-    --primary-hover: #7cb0ff;
-    --danger: #ff7b72;
-    --success: #56d364;
-  }
-}
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -52,6 +47,7 @@ a { color: var(--primary); }
 .topbar nav { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .topbar nav a { color: var(--muted); text-decoration: none; }
 .topbar nav a.active, .topbar nav a:hover { color: var(--text); }
+.topbar .theme-toggle { display: inline-flex; align-items: center; }
 
 main { max-width: 960px; margin: 0 auto; padding: 32px 16px; }
 main.narrow, .narrow { max-width: 420px; margin: 0 auto; }
@@ -90,7 +86,7 @@ button {
   border-radius: 6px;
   border: 1px solid var(--primary);
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-weight: 600;
 }
 button:hover { background: var(--primary-hover); }
@@ -130,27 +126,14 @@ code { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-
 /* ---------- Spaces und Seiten (Meilenstein 2) ---------- */
 
 :root {
-  --info-bg: #eaf2ff;
-  --warn-bg: #fff4e5;
-  --warn: #b25e09;
-  --success-bg: #e9f7ee;
-  --note-bg: #f3f0ff;
-  --note: #6941c6;
-  --added-bg: #e6f6ea;
-  --removed-bg: #fdecea;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --info-bg: #142540;
-    --warn-bg: #3a2810;
-    --warn: #f0a85a;
-    --success-bg: #12301c;
-    --note-bg: #261d40;
-    --note: #b69cff;
-    --added-bg: #12301c;
-    --removed-bg: #3d1714;
-  }
+  --info-bg: light-dark(#eaf2ff, #142540);
+  --warn-bg: light-dark(#fff4e5, #3a2810);
+  --warn: light-dark(#b25e09, #f0a85a);
+  --success-bg: light-dark(#e9f7ee, #12301c);
+  --note-bg: light-dark(#f3f0ff, #261d40);
+  --note: light-dark(#6941c6, #b69cff);
+  --added-bg: light-dark(#e6f6ea, #12301c);
+  --removed-bg: light-dark(#fdecea, #3d1714);
 }
 
 main:has(.space-layout) { max-width: none; padding: 24px clamp(16px, 2vw, 32px); }
@@ -162,7 +145,7 @@ a.button {
   border-radius: 6px;
   border: 1px solid var(--primary);
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   font-weight: 600;
   text-decoration: none;
 }
@@ -326,6 +309,7 @@ label.check input { width: auto; margin-top: 3px; }
 .search-results p { margin: 4px 0 0; }
 .search-results mark { background: var(--info-bg); color: inherit; font-weight: 600; padding: 0 1px; }
 fieldset.field { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
+fieldset.choices { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 8px; }
 
 /* Zeichnungen (draw.io): PNG mit weißem Grund, damit Linien auch im dunklen Modus sichtbar bleiben */
 .rich figure.drawing, .editor-content .drawing { margin: 12px 0; }

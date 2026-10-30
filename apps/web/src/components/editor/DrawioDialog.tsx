@@ -5,6 +5,8 @@ import { drawingSrc } from '@wiki/shared';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, errorMessage, uploadAttachment, uploadAttachmentVersion } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { resolveTheme } from '@/lib/theme';
 import {
   blobToDataUrl,
   dataUrlToBlob,
@@ -50,6 +52,10 @@ export function DrawioDialog({
   const frame = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState('draw.io wird geladen …');
   const [failed, setFailed] = useState(false);
+  // Oberfläche von draw.io passend zum Wiki; beim Öffnen festgelegt, damit ein Wechsel die Zeichnung nicht neu lädt.
+  // Gespeichert wird weiter mit weißem Grund (export background).
+  const { state } = useAuth();
+  const [dark] = useState(() => resolveTheme(state?.user?.theme ?? 'system') === 'dark');
   // Aktuelle Werte für den Nachrichten-Handler, ohne ihn bei jeder Änderung neu anzumelden
   const latest = useRef({ pageId, drawing, title, onSaved, onClose });
   latest.current = { pageId, drawing, title, onSaved, onClose };
@@ -187,7 +193,7 @@ export function DrawioDialog({
           )}
         </p>
       )}
-      <iframe ref={frame} className="drawio-frame" title="draw.io" src={DRAWIO_URL} sandbox={DRAWIO_SANDBOX} data-testid="drawio-frame" />
+      <iframe ref={frame} className="drawio-frame" title="draw.io" src={`${DRAWIO_URL}&dark=${dark ? 1 : 0}`} sandbox={DRAWIO_SANDBOX} data-testid="drawio-frame" />
     </div>,
     document.body,
   );

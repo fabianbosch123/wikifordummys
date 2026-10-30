@@ -1,12 +1,13 @@
 'use client';
 
-import { checkPasswordPolicy, type MeDto, type SessionInfoDto } from '@wiki/shared';
+import { checkPasswordPolicy, THEME_PREFERENCES, type MeDto, type SessionInfoDto } from '@wiki/shared';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiTokens } from '@/components/ApiTokens';
 import { RecoveryCodes } from '@/components/RecoveryCodes';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth, useAuth } from '@/lib/auth';
+import { THEME_LABELS } from '@/lib/theme';
 
 function ProfileForm({ user }: { user: MeDto }) {
   const { refresh } = useAuth();
@@ -34,6 +35,44 @@ function ProfileForm({ user }: { user: MeDto }) {
           <button type="submit">Speichern</button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+const THEME_HINTS = {
+  system: 'wie im Betriebssystem bzw. Browser eingestellt',
+  light: 'helle Flächen, dunkle Schrift',
+  dark: 'dunkle Flächen, helle Schrift',
+} as const;
+
+/** Hell, dunkel oder System; gespeichert im Konto, gilt also auf allen Geräten */
+function ThemeCard({ user }: { user: MeDto }) {
+  const { setTheme } = useAuth();
+  const [error, setError] = useState('');
+
+  return (
+    <Card title="Darstellung">
+      <fieldset className="choices">
+        <legend className="visually-hidden">Darstellung</legend>
+        {THEME_PREFERENCES.map((theme) => (
+          <label key={theme} className="check">
+            <input
+              type="radio"
+              name="theme"
+              value={theme}
+              checked={user.theme === theme}
+              onChange={() => {
+                setError('');
+                setTheme(theme).catch((err) => setError(errorMessage(err)));
+              }}
+            />
+            <span>
+              {THEME_LABELS[theme]} <span className="muted">– {THEME_HINTS[theme]}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <Alert>{error}</Alert>
     </Card>
   );
 }
@@ -198,6 +237,7 @@ export default function ProfilePage() {
           <>
             <h1>Mein Konto</h1>
             <ProfileForm user={user} />
+            <ThemeCard user={user} />
             <PasswordForm user={user} onChanged={() => setReloadKey((k) => k + 1)} />
             <Sessions reloadKey={reloadKey} />
             <RecoveryCodesCard />
