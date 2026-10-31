@@ -13,7 +13,7 @@ import { Alert, DialogPanel, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
-import { type DeletedFlash, setFlash, takeFlash } from '@/lib/flash';
+import { type DeletedFlash, setFlash, takeFlash } from '@/lib/deleted-notice';
 import { useHotkeys, withHotkey } from '@/lib/hotkeys';
 import { flattenTree } from '@/lib/tree';
 
