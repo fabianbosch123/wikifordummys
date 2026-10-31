@@ -103,6 +103,11 @@ export function uploadAttachmentVersion(attachmentId: string, file: Blob): Promi
   return sendFile(`/attachments/${attachmentId}/versions`, file);
 }
 
+/** 404 der API: Seite gibt es nicht, ist gelöscht oder nicht sichtbar (die API unterscheidet das nicht) */
+export function isNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
+}
+
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === 'RATE_LIMITED') {

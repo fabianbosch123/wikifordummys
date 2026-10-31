@@ -1,5 +1,7 @@
 /** Umgebung für API und Weboberfläche während der Ende-zu-Ende-Tests */
 export const e2eEnv: Record<string, string> = {
+  // Gilt für API und `next start`. Der Build der Weboberfläche setzt selbst NODE_ENV=production (apps/web/package.json),
+  // weil `next build` mit development an der Fehlerseite /404 abbricht („<Html> should not be imported …“)
   NODE_ENV: 'development',
   PORT: '3001',
   APP_ORIGIN: 'http://localhost:3100',

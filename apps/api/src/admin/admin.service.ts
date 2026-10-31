@@ -63,9 +63,12 @@ export class AdminService {
   }
 
   async inviteUser(dto: InviteUserDto, ctx: AuthContext, ip: string) {
-    if (await this.prisma.user.findUnique({ where: { email: dto.email } })) {
-      throw Errors.conflict('Es gibt bereits ein Konto mit dieser E-Mail-Adresse.');
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email }, select: { id: true, status: true } });
+    if (existing?.status === 'invited') {
+      // Nur Admins sehen das; die Benutzerliste nennt den Status ohnehin
+      throw Errors.alreadyInvited(existing.id);
     }
+    if (existing) throw Errors.conflict('Es gibt bereits ein Konto mit dieser E-Mail-Adresse.');
     const groupIds = await this.assignableGroupIds(dto.groupIds);
     const user = await this.prisma.user.create({
       data: {

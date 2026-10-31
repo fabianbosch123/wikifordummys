@@ -34,6 +34,8 @@ export const Errors = {
   invalidToken: () => new ApiError(400, 'INVALID_TOKEN', 'Der Link ist ungültig oder abgelaufen.'),
   badRequest: (message: string, code = 'BAD_REQUEST') => new ApiError(400, code, message),
   conflict: (message: string, extra: Record<string, unknown> = {}) => new ApiError(409, 'CONFLICT', message, extra),
+  alreadyInvited: (userId: string) =>
+    new ApiError(409, 'ALREADY_INVITED', 'Für diese Adresse ist schon eine Einladung offen. Du kannst sie erneut verschicken.', { userId }),
   spaceArchived: () => new ApiError(403, 'SPACE_ARCHIVED', 'Der Space ist archiviert und kann nicht bearbeitet werden.'),
   invalidContent: (message: string) => new ApiError(400, 'INVALID_CONTENT', message),
   tooLarge: (maxMb: number) => new ApiError(413, 'TOO_LARGE', `Die Datei ist zu groß (höchstens ${maxMb} MB).`),

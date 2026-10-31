@@ -1,6 +1,7 @@
 /** Gemeinsame Typen und Regeln für API und Weboberfläche. */
 
 export * from './content';
+export * from './user-agent';
 import type { DocNode } from './content';
 
 export const PASSWORD_MIN_LENGTH = 12;
@@ -93,7 +94,7 @@ export interface AuditEntryDto {
 }
 
 export interface ApiErrorBody {
-  error: { code: string; message: string; retryAfter?: number };
+  error: { code: string; message: string; retryAfter?: number; /** bei ALREADY_INVITED: das eingeladene Konto */ userId?: string };
 }
 
 export const SYSTEM_GROUPS = {

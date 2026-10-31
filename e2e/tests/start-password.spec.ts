@@ -29,7 +29,14 @@ test('Erster Admin mit Startpasswort aus der Shell: 2FA, dann Pflicht zum Passwo
   await page.getByLabel('Neues Passwort wiederholen').fill(PASSWORD);
   await page.getByRole('button', { name: 'Passwort ändern' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Mein Konto' })).toBeVisible();
+  // Nach dem Wechsel geht es mit einer Erfolgsmeldung zur Startseite (N-9)
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: /^Willkommen/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Passwort geändert.' })).toBeVisible();
+  // Die Meldung erscheint nur einmal
+  await page.reload();
+  await expect(page.getByRole('heading', { name: /^Willkommen/ })).toBeVisible();
+  await expect(page.getByText('Passwort geändert.')).toHaveCount(0);
   await page.getByRole('link', { name: 'Administration' }).click();
   await expect(page).toHaveURL(/\/admin\/users/);
 });

@@ -3,8 +3,9 @@
 import type { SpaceDto } from '@wiki/shared';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { NotFound } from '@/components/NotFound';
 import { Alert } from '@/components/ui';
-import { errorMessage } from '@/lib/api';
+import { errorMessage, isNotFound } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
 
@@ -18,6 +19,7 @@ function SpaceRedirect() {
     if (space.data?.homePageId) router.replace(`/pages/${space.data.homePageId}`);
   }, [space.data, router]);
 
+  if (isNotFound(space.error)) return <NotFound kind="space" />;
   if (space.error) return <Alert>{errorMessage(space.error)}</Alert>;
   return <p className="muted">Lade …</p>;
 }

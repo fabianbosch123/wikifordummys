@@ -9,8 +9,9 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RestrictionsDialog } from '@/components/RestrictionsDialog';
 import { RichText } from '@/components/RichText';
 import { SpaceLayout } from '@/components/SpaceLayout';
+import { NotFound } from '@/components/NotFound';
 import { Alert, DialogPanel, formatDate } from '@/components/ui';
-import { api, errorMessage } from '@/lib/api';
+import { api, errorMessage, isNotFound } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
 import { type DeletedFlash, setFlash, takeFlash } from '@/lib/deleted-notice';
@@ -166,6 +167,7 @@ function PageView() {
     }
   }
 
+  if (isNotFound(page.error)) return <NotFound kind="page" />;
   if (page.error) return <Alert>{errorMessage(page.error)}</Alert>;
   if (!page.data) return <p className="muted">Lade …</p>;
   const p = page.data;
