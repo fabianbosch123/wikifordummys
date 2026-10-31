@@ -89,6 +89,12 @@ function ToolButton({
 const ariaKeys = (label: string) => label.replace('Strg', 'Control').replace('Umschalt', 'Shift');
 const HOTKEY_ARIA = Object.fromEntries(Object.entries(HOTKEYS).map(([id, def]) => [id, ariaKeys(def.label)])) as Record<HotkeyId, string>;
 
+/** Symbol vor dem Kurztext eines Knopfs; Screenreader lesen nur den Namen (aria-label) */
+function Icon({ children }: { children: ReactNode }) {
+  return <span aria-hidden="true">{children}</span>;
+}
+
+/** Boxen mit Symbol und Namen als Text, nicht nur mit Symbol (Rundgang 2, N-6) */
 const CALLOUTS: { variant: CalloutVariant; label: string; icon: string }[] = [
   { variant: 'info', label: 'Infobox', icon: 'ℹ' },
   { variant: 'warning', label: 'Warnbox', icon: '⚠' },
@@ -268,29 +274,29 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
           1. Liste
         </ToolButton>
         <ToolButton label="Zitat" hotkey="blockquote" active={s.blockquote} onClick={() => chain().toggleBlockquote().run()}>
-          ❝
+          <Icon>❝</Icon> Zitat
         </ToolButton>
         <ToolButton label="Code-Block" hotkey="codeBlock" active={s.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>
           {'{ }'}
         </ToolButton>
         <ToolButton label="Trennlinie" onClick={() => chain().setHorizontalRule().run()}>
-          ―
+          <Icon>―</Icon> Trennlinie
         </ToolButton>
         <span className="sep" />
         {CALLOUTS.map((c) => (
           <ToolButton key={c.variant} label={c.label} onClick={() => toggleCallout(c.variant)}>
-            {c.icon}
+            <Icon>{c.icon}</Icon> {c.label}
           </ToolButton>
         ))}
         <span className="sep" />
         <ToolButton label={s.link ? 'Link bearbeiten' : 'Link'} active={s.link || linkForm} onClick={() => openForm(linkForm ? null : 'link')}>
-          🔗
+          <Icon>🔗</Icon> Link
         </ToolButton>
         <ToolButton label="Seite verlinken" active={picker} onClick={() => openForm(picker ? null : 'page')} disabled={pages.length === 0}>
           ↪ Seite
         </ToolButton>
         <ToolButton label="Bild über Adresse einbinden" active={imageForm !== null && !imageForm.uploaded} onClick={() => openForm(imageForm ? null : 'image')}>
-          🖼
+          <Icon>🖼</Icon> Bild über Adresse
         </ToolButton>
         {pageId && (
           <>
@@ -301,7 +307,7 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
           </>
         )}
         <ToolButton label="Tabelle einfügen" onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
-          ▦
+          <Icon>▦</Icon> Tabelle
         </ToolButton>
         {drawio.enabled && (
           <ToolButton

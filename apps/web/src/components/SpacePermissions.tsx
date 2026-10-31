@@ -1,6 +1,6 @@
 'use client';
 
-import { SPACE_ROLES, type DirectoryDto, type SpaceDto, type SpacePermissionDto, type SpaceRole } from '@wiki/shared';
+import { SYSTEM_GROUPS, type DirectoryDto, type SpaceDto, type SpacePermissionDto, type SpaceRole, type SubjectDto } from '@wiki/shared';
 import { useEffect, useState } from 'react';
 import { SubjectPicker, subjectLabel } from '@/components/SubjectPicker';
 import { Alert, Card } from '@/components/ui';
@@ -13,10 +13,28 @@ export const ROLE_LABELS: Record<SpaceRole, string> = {
   viewer: 'Leser',
 };
 
+/** Anzeigereihenfolge von wenig zu viel Recht, damit „Space-Admin“ nicht der erste Treffer im Auswahlfeld ist (Rundgang 2, N-2) */
+const ROLE_ORDER: readonly SpaceRole[] = ['viewer', 'editor', 'admin'];
+
+/**
+ * Rückfrage, bevor eine Gruppe oder Person Space-Admin wird. Bei „alle-benutzer“ ausdrücklich, dass damit jedes Konto
+ * den Space verwalten kann. Gibt false zurück, wenn abgebrochen wurde.
+ */
+function confirmAdminGrant(subject: SubjectDto, spaceName: string): boolean {
+  const everyone = subject.type === 'group' && subject.name === SYSTEM_GROUPS.ALL_USERS;
+  const who = everyone ? 'JEDES aktive Konto im Wiki (Gruppe alle-benutzer)' : subjectLabel(subject);
+  return window.confirm(
+    `${who} wirklich zum Space-Admin von „${spaceName}“ machen?\n\n` +
+      'Space-Admins können Rollen vergeben und entziehen, Einschränkungen umgehen, Seiten endgültig aus dem Papierkorb löschen ' +
+      'und den Space archivieren.' +
+      (everyone ? '\n\nDamit gehört der Space praktisch allen. Für normales Bearbeiten reicht die Rolle „Bearbeiter“.' : ''),
+  );
+}
+
 function RoleSelect({ value, onChange, label, disabled }: { value: SpaceRole; onChange: (role: SpaceRole) => void; label: string; disabled?: boolean }) {
   return (
     <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as SpaceRole)}>
-      {SPACE_ROLES.map((r) => (
+      {ROLE_ORDER.map((r) => (
         <option key={r} value={r}>
           {ROLE_LABELS[r]}
         </option>
@@ -86,12 +104,14 @@ export function SpacePermissions({ space }: { space: SpaceDto }) {
                     label={`Rolle für ${subjectLabel(e.subject)}`}
                     value={e.role}
                     disabled={busy}
-                    onChange={(role) =>
+                    onChange={(role) => {
+                      // Ohne Bestätigung bleibt das Auswahlfeld auf der alten Rolle, gespeichert wird nichts
+                      if (role === 'admin' && e.role !== 'admin' && !confirmAdminGrant(e.subject, space.name)) return;
                       void change(
                         entries.map((x, j) => (j === i ? { ...x, role } : x)),
                         `Gespeichert: ${subjectLabel(e.subject)} ist jetzt ${ROLE_LABELS[role]}.`,
-                      )
-                    }
+                      );
+                    }}
                   />
                 </td>
                 <td>
@@ -118,7 +138,10 @@ export function SpacePermissions({ space }: { space: SpaceDto }) {
       <SubjectPicker
         directory={directory.data}
         exclude={entries.map((e) => e.subject)}
-        onAdd={(subject) => void change([...entries, { subject, role: newRole }], `Gespeichert: ${subjectLabel(subject)} ist jetzt ${ROLE_LABELS[newRole]}.`)}
+        onAdd={(subject) => {
+          if (newRole === 'admin' && !confirmAdminGrant(subject, space.name)) return false;
+          void change([...entries, { subject, role: newRole }], `Gespeichert: ${subjectLabel(subject)} ist jetzt ${ROLE_LABELS[newRole]}.`);
+        }}
       >
         <RoleSelect label="Rolle für neuen Eintrag" value={newRole} onChange={setNewRole} />
       </SubjectPicker>

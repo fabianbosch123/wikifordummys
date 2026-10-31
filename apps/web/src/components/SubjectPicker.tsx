@@ -12,7 +12,8 @@ export function SubjectPicker({
 }: {
   directory: DirectoryDto;
   exclude: SubjectDto[];
-  onAdd: (subject: SubjectDto) => void;
+  /** false: abgebrochen (z. B. Rückfrage verneint), die Auswahl bleibt stehen */
+  onAdd: (subject: SubjectDto) => boolean | void;
   /** Weitere Eingaben vor dem Button, z. B. die Rolle */
   children?: ReactNode;
 }) {
@@ -26,7 +27,7 @@ export function SubjectPicker({
     const [type, subjectId] = value.split(':') as ['group' | 'user', string];
     const name = type === 'group' ? groups.find((g) => g.id === subjectId)?.name : users.find((u) => u.id === subjectId)?.displayName;
     if (!name) return;
-    onAdd({ type, id: subjectId, name });
+    if (onAdd({ type, id: subjectId, name }) === false) return;
     setValue('');
   }
 
