@@ -5,6 +5,10 @@ Für Rückmeldungen zur Bedienung gibt es im Repo den Claude-Code-Subagenten `.c
 kritischen, ungeduldigen Endbenutzer: Er startet den aktuellen Build, klickt sich im Browser durch echte Aufgaben und
 meldet Bugs, Bedienfehler und Verbesserungsvorschläge. Jeder Fund ist nachgestellt und hat einen Vorschlag.
 
+Er läuft fest auf **Haiku 5.5** (`model: claude-haiku-5-5` im Frontmatter), unabhängig vom Modell der aufrufenden
+Sitzung. Für einen Rundgang reicht das kleine Modell, und es ist schneller und günstiger. Wer ein anderes Modell will,
+ändert das Feld (`haiku`, `sonnet`, `opus`, `inherit` oder eine volle Modell-ID).
+
 ## Was er darf und was nicht
 
 - **Läuft nur auf Aufruf.** Die Beschreibung des Agenten verbietet, ihn von sich aus oder nach anderen Aufgaben zu

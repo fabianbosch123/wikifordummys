@@ -5,6 +5,10 @@ Code, findet Lücken und liefert sie im Format des Registers unter `.security-au
 lesende Werkzeuge (Read, Grep, Glob), bewusst ohne Bash: Dass er nichts ausführt, schreibt oder ins Netz schickt, hängt
 damit nicht am Prompt, sondern an seinen Werkzeugen. Behoben wird in der aufrufenden Sitzung, über einen normalen PR.
 
+Er läuft fest auf **Opus 5.5** (`model: claude-opus-5-5` im Frontmatter), unabhängig vom Modell der aufrufenden
+Sitzung, damit Reviews immer mit dem stärksten Modell laufen. Wer ein anderes Modell will, ändert das Feld (`haiku`,
+`sonnet`, `opus`, `inherit` oder eine volle Modell-ID).
+
 ## Wann
 
 - Vor dem Mergen jedes PRs, der Anmeldung, Rechte, Anhänge, Office, draw.io, MCP/OAuth, Installer, `wikictl`, Caddy,
