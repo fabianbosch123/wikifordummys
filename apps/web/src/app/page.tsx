@@ -8,7 +8,7 @@ import { Alert, Card, Field } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
-import { useFlash } from '@/lib/flash';
+import { useFlash } from '@/lib/session-notice';
 
 function CreateSpace() {
   const router = useRouter();

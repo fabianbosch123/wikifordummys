@@ -8,7 +8,7 @@ import { RecoveryCodes } from '@/components/RecoveryCodes';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth, useAuth } from '@/lib/auth';
-import { setFlash } from '@/lib/flash';
+import { setFlash } from '@/lib/session-notice';
 import { THEME_LABELS } from '@/lib/theme';
 
 function ProfileForm({ user }: { user: MeDto }) {
