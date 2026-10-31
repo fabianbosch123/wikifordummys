@@ -67,6 +67,8 @@ test('Spaltenbreiten und Bildgröße lassen sich im Editor ziehen und bleiben ge
 
   // Bild hochladen und an der rechten unteren Ecke auf etwa die halbe Breite ziehen
   await page.locator('input[type=file][accept^="image/"]').setInputFiles({ name: 'diagramm.png', mimeType: 'image/png', buffer: png(400, 200) });
+  await page.getByLabel('Kurze Beschreibung (für Screenreader)').fill('Diagramm');
+  await page.getByRole('button', { name: 'Einfügen', exact: true }).click();
   const editorImage = editor.locator('img');
   await expect(editorImage).toHaveJSProperty('naturalWidth', 400);
   const wrapper = editor.locator('[data-resize-wrapper]');

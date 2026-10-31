@@ -185,6 +185,8 @@ export function PageTree({ spaceKey, nodes, currentId, homePageId, canEdit, onMo
                 <Link
                   href={`/pages/${node.id}`}
                   aria-current={node.id === currentId ? 'page' : undefined}
+                  // Lange Titel kürzt der Baum nach zwei Zeilen; der volle Titel steht im Tooltip
+                  title={node.title.length > 40 ? node.title : undefined}
                   onClick={(e) => {
                     if (hasChildren && plainClick(e)) toggle(node.id);
                   }}
