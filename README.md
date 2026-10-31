@@ -55,7 +55,7 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 ## Spaces, Seiten und Editor
 
 - **Spaces** mit Schlüssel (z. B. `IT`), Name, Beschreibung und Startseite. Archivieren macht einen Space schreibgeschützt und blendet ihn in der Übersicht unter „Archiv“ aus. Spaces anlegen darf, wer das globale Recht `create_space` hat (standardmäßig `alle-benutzer`).
-- **Seitenbaum** beliebig tief, mit Brotkrumen, in einer Seitenleiste links (etwa 20 % der Breite); der Inhalt nutzt die volle restliche Breite. Seiten lassen sich per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen.
+- **Seitenbaum** beliebig tief, mit Brotkrumen, in einer Seitenleiste links (etwa 20 % der Breite); der Inhalt nutzt die volle restliche Breite. Seiten lassen sich per Drag-and-drop im Baum oder über „Verschieben“ umsortieren und umhängen. Gibt es unter derselben Seite schon eine Seite mit dem gleichen Titel, warnt das Formular vor dem Speichern; in Auswahllisten stehen gleiche Titel mit ihrem Pfad.
 - **Editor (TipTap):** Überschriften, Fett, Kursiv, Unterstrichen, Durchgestrichen, Code, Listen, Zitate, Code-Blöcke, Trennlinien, Tabellen, Bilder, Info-, Warn-, Erfolgs- und Notizboxen, Links und Links auf Wiki-Seiten. Bilder lassen sich an den Ecken, Tabellenspalten am Spaltenrand in der Größe ziehen. Links und Bilder über Adresse fügt ein kleines Formular unter der Werkzeugleiste ein, das die Adresse gleich beim Tippen prüft (keine Browser-Popups). Gespeichert wird JSON, kein HTML.
 - **Schriftarten:** Auswahl in der Werkzeugleiste mit den zehn gängigsten Schriften (Arial, Helvetica, Times New Roman, Calibri, Cambria, Verdana, Tahoma, Georgia, Segoe UI, Courier New). Ist die Schrift beim Lesenden installiert, nimmt der Browser sie; sonst liefert das Wiki eine freie, möglichst metrisch kompatible Ersatzschrift selbst aus (z. B. Carlito für Calibri), ohne fremde Server. Auch im Office-Editor verfügbar. Lizenzen und Quellen in [docs/schriftarten.md](docs/schriftarten.md).
 - **Drag & Drop und Zwischenablage:** Bilder und Dateien lassen sich in den Text ziehen oder einfügen. Bilder erscheinen als Bild, andere Dateien als Link auf den Anhang; bei neuen Seiten wird beim Anlegen hochgeladen.
@@ -64,20 +64,21 @@ Der Installer fragt Domain, Betriebsart, Mailserver, ersten Administrator, Siche
 - **Handy:** Speichern und Abbrechen bleiben am unteren Rand stehen, der Seitenbaum ist auf schmalen Bildschirmen eingeklappt. Titel zeigen einen Zeichenzähler (höchstens 200), lange Titel kürzt der Seitenbaum nach zwei Zeilen.
 - **Schutz vor Überschreiben:** Hat jemand anderes inzwischen gespeichert, meldet der Editor den Konflikt und bietet „Trotzdem speichern“ an; die andere Fassung bleibt im Verlauf.
 - **Tastenkürzel:** `E` öffnet die angezeigte Seite im Editor (nur mit Bearbeitungsrecht, nicht während der Fokus in einem Eingabefeld liegt), `Strg+S` (macOS `Cmd+S`) speichert im Editor, auch aus dem Text oder dem Titelfeld heraus. Die Tooltips der Werkzeugleiste nennen die Kürzel des Editors (z. B. „Fett (Strg+B)“). Die Kürzel stehen zentral in `apps/web/src/lib/hotkeys.ts`; neue werden dort eingetragen und auf der jeweiligen Seite mit `useHotkeys` belegt (Kürzel mit `editor: true` belegt TipTap selbst).
-- **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt.
+- **Papierkorb:** Gelöschte Seiten samt Unterseiten bleiben 30 Tage wiederherstellbar und werden danach automatisch entfernt. Nach dem Löschen zeigt die Elternseite einen Hinweis mit Link auf den Papierkorb und „Rückgängig“.
+- **Leere Seiten** zeigen statt weißer Fläche einen Hinweis mit „Inhalt schreiben“ und „Unterseite anlegen“.
 
 ## Rechte und Suche
 
-- **Rollen je Space** für Gruppen und einzelne Personen: *Leser* sehen die Seiten, *Bearbeiter* legen Seiten an, ändern und verschieben sie und laden Anhänge hoch, *Space-Admins* verwalten zusätzlich Einstellungen, Rollen und den Papierkorb. Es gilt die höchste Rolle aus Person und Gruppen. Wer keine Rolle hat, sieht den Space nicht (404). Systemadministratoren sind in jedem Space Admin. Gepflegt wird das unter **Space-Einstellungen → Rollen**.
+- **Rollen je Space** für Gruppen und einzelne Personen: *Leser* sehen die Seiten, *Bearbeiter* legen Seiten an, ändern und verschieben sie und laden Anhänge hoch, *Space-Admins* verwalten zusätzlich Einstellungen, Rollen und den Papierkorb. Es gilt die höchste Rolle aus Person und Gruppen. Wer keine Rolle hat, sieht den Space nicht (404). Systemadministratoren sind in jedem Space Admin. Gepflegt wird das unter **Space-Einstellungen → Rollen**; jede Änderung gilt sofort. Einschränkungen dagegen werden im Dialog gesammelt und erst mit „Einschränkungen speichern“ wirksam, ungespeicherte Änderungen zeigt der Dialog an.
 - **Neue Spaces** sind standardmäßig offen (Ersteller Space-Admin, `alle-benutzer` Bearbeiter); beim Anlegen lässt sich das abwählen, dann sieht ihn zunächst nur der Ersteller.
 - **Seiteneinschränkungen** „Ansehen“ und „Bearbeiten“ auf Gruppen oder Personen, Schaltfläche **Einschränkungen** auf der Seite. Sie gelten für die Seite und alle Unterseiten und verengen nur: jede Einschränkung entlang des Pfads muss erfüllt sein. Eingeschränkte Seiten verschwinden für andere aus Baum, Suche und Anhängen (404). Space-Admins sind nicht eingeschränkt, damit keine Seite unerreichbar wird; Bearbeiter können sich nicht selbst aussperren.
-- **Volltextsuche** über Titel, Inhalt und Beschriftungen von Zeichnungen mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben, Filter nach Space; immer nur über Seiten, die man sehen darf. Suchfeld oben in der Kopfzeile.
+- **Volltextsuche** über Titel, Inhalt und Beschriftungen von Zeichnungen mit deutschem Wörterbuch (PostgreSQL), Suche nach Wortanfängen (`Druck` findet `Drucker`), Treffer hervorgehoben und mit Pfad (Space › übergeordnete Seiten), Filter nach Space; immer nur über Seiten, die man sehen darf. Auch Dateinamen von Anhängen werden gefunden, mit Verweis auf die Seite. Suchfeld oben in der Kopfzeile.
 
 ## Anhänge
 
 - **Anhänge je Seite** bis 50 MB (einstellbar über `ATTACHMENT_MAX_MB`): Bilder mit Vorschau, PDF öffnet im Browser, Office-Dateien im Office-Editor (falls eingeschaltet), alles andere wird heruntergeladen.
 - **Panel rechts** neben dem Seiteninhalt mit der Kopfzeile „Anhänge (n)“ zum Auf- und Zuklappen. Zugeklappt bekommt der Inhalt die volle Breite; der Zustand wird je Browser gemerkt. Auf schmalen Bildschirmen (unter 1000 px) steht das Panel unter dem Inhalt.
-- **Fassungen:** Office-Editor und draw.io legen beim Speichern eine neue Fassung des Anhangs an; ältere Fassungen bleiben herunterladbar.
+- **Fassungen:** Office-Editor und draw.io legen beim Speichern eine neue Fassung des Anhangs an; ältere Fassungen bleiben herunterladbar. Wer im Panel eine Datei hochlädt, die es an der Seite schon gibt, wählt zwischen „Als neue Fassung speichern“, „Als eigene Datei behalten“ (z. B. `notiz (2).txt`) und „Nicht hochladen“.
 - **Schutz vor voller Platte:** Uploads werden abgelehnt, wenn danach weniger als 2 GB frei wären; dazu ein Tageskontingent und eine stündliche Höchstzahl je Benutzer (`ATTACHMENT_MIN_FREE_MB`, `ATTACHMENT_QUOTA_MB_PER_DAY`, `RATE_UPLOADS_PER_HOUR` in `.env`).
 - Anhänge liegen im Volume `attachments` unter zufälligem Namen und sind Teil der Sicherung.
 
@@ -247,7 +248,7 @@ Alle Routen liegen unter `/api/v1`. Fehler kommen einheitlich als `{ "error": { 
 | `GET /attachments/:id/office?mode=view\|edit` | Signierte Konfiguration für den Office-Editor | Leser / Bearbeiter |
 | `POST /pages/:id/office-files` | Leere Word-, Excel- oder PowerPoint-Datei als Anhang anlegen (`kind`: docx, xlsx, pptx; `name`) | Bearbeiter |
 | `GET /office/files/:token`, `POST /office/callback` | Datei für den Editor-Server, Rückruf nach dem Speichern (von außen gesperrt) | signierter Link / JWT |
-| `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert | angemeldet |
+| `GET /search?q=&space=&offset=` | Volltextsuche, nach Rechten gefiltert; liefert Seiten mit Pfad und (bei `offset=0`) passende Anhänge | angemeldet |
 | `GET /directory` | Aktive Benutzer und Gruppen für die Rechtevergabe (ohne E-Mail) | angemeldet |
 | `GET/PUT/DELETE /admin/settings/mail` | SMTP-Zugang ansehen, prüfen und speichern, auf `.env` zurücksetzen | Systemadmin |
 | `POST /admin/settings/mail/test` | Testmail senden (Standard: an die eigene Adresse) | Systemadmin |

@@ -352,6 +352,20 @@ fieldset.choices { border: 0; padding: 0; margin: 0; min-width: 0; display: grid
 .insert-preview img { display: block; max-width: 160px; max-height: 100px; border: 1px solid var(--border); border-radius: 4px; }
 input[aria-invalid='true'] { border-color: var(--danger); }
 
+/* ---------- Hinweise aus dem Nutzer-Feedback (N-4, N-10, N-13) ---------- */
+
+.field-warning { display: block; margin-top: 4px; color: var(--warn); }
+.alert.notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.alert.notice .notice-error { flex-basis: 100%; color: var(--danger); }
+.empty-page { border: 1px dashed var(--border); border-radius: var(--radius); padding: 16px 20px; color: var(--muted); }
+.empty-page p { margin: 0 0 8px; }
+.empty-page p:last-child { margin-bottom: 0; }
+.search-path { overflow-wrap: anywhere; }
+.unsaved { color: var(--warn); }
+.duplicate-prompt { margin: 8px 0; }
+.duplicate-prompt p { margin: 0 0 8px; }
+.duplicate-prompt p:last-child { margin-bottom: 0; }
+
 /* Nicht gefunden (N-17) und Kopieren-Knöpfe (N-15) */
 .not-found { padding-top: 24px; }
 .not-found form input { flex: 1 1 180px; min-width: 0; }

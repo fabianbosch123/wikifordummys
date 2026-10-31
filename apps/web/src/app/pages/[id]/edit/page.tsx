@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui';
 import { api, errorMessage, isNotFound } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
+import { siblingTitles } from '@/lib/tree';
 
 function EditPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,6 +36,7 @@ function EditPage() {
             initialTitle={p.title}
             initialContent={p.content}
             tree={tree}
+            siblingTitles={siblingTitles(tree, p.parentId, p.id)}
             pageId={p.id}
             version={p.version}
             draftScope={`page:${p.id}`}

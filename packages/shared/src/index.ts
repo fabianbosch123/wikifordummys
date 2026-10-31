@@ -289,15 +289,35 @@ export interface SearchHitDto {
   title: string;
   spaceKey: string;
   spaceName: string;
+  /** Titel der übergeordneten Seiten von der Wurzel bis zur Elternseite, zum Unterscheiden gleicher Titel */
+  path: string[];
   /** Textausschnitt; match = Treffer zum Hervorheben */
   snippet: { text: string; match: boolean }[];
+  updatedAt: string;
+}
+
+/** Anhang, dessen Dateiname zur Suche passt, mit der Seite, an der er hängt */
+export interface AttachmentHitDto {
+  id: string;
+  filename: string;
+  url: string;
+  pageId: string;
+  pageTitle: string;
+  /** Titel der übergeordneten Seiten der Seite */
+  path: string[];
+  spaceKey: string;
+  spaceName: string;
   updatedAt: string;
 }
 
 export interface SearchResultDto {
   results: SearchHitDto[];
   hasMore: boolean;
+  /** Passende Anhänge (Dateiname), nur bei der ersten Trefferseite (offset 0), höchstens ATTACHMENT_HITS_MAX */
+  attachments: AttachmentHitDto[];
 }
+
+export const ATTACHMENT_HITS_MAX = 10;
 
 export const SEARCH_PAGE_SIZE = 20;
 

@@ -13,9 +13,9 @@ export const ROLE_LABELS: Record<SpaceRole, string> = {
   viewer: 'Leser',
 };
 
-function RoleSelect({ value, onChange, label }: { value: SpaceRole; onChange: (role: SpaceRole) => void; label: string }) {
+function RoleSelect({ value, onChange, label, disabled }: { value: SpaceRole; onChange: (role: SpaceRole) => void; label: string; disabled?: boolean }) {
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value as SpaceRole)}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as SpaceRole)}>
       {SPACE_ROLES.map((r) => (
         <option key={r} value={r}>
           {ROLE_LABELS[r]}
@@ -25,13 +25,16 @@ function RoleSelect({ value, onChange, label }: { value: SpaceRole; onChange: (r
   );
 }
 
-/** Rollen im Space für Gruppen und Personen; gespeichert wird die ganze Liste auf einmal */
+/**
+ * Rollen im Space für Gruppen und Personen. Jede Änderung (Hinzufügen, Rolle ändern, Entfernen) wird sofort gespeichert,
+ * damit niemand glaubt, eine Kollegin habe schon Zugriff, obwohl die Zeile nur in der Liste steht.
+ */
 export function SpacePermissions({ space }: { space: SpaceDto }) {
   const saved = useApiData<SpacePermissionDto[]>(`/spaces/${space.key}/permissions`);
   const directory = useApiData<DirectoryDto>('/directory');
   const [entries, setEntries] = useState<SpacePermissionDto[]>([]);
   const [newRole, setNewRole] = useState<SpaceRole>('editor');
-  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -39,24 +42,26 @@ export function SpacePermissions({ space }: { space: SpaceDto }) {
     if (saved.data) setEntries(saved.data);
   }, [saved.data]);
 
-  function change(next: SpacePermissionDto[]) {
+  /** Speichert die ganze Liste; schlägt das fehl, bleibt der zuletzt gespeicherte Stand stehen */
+  async function change(next: SpacePermissionDto[], done: string) {
+    const previous = entries;
     setEntries(next);
-    setDirty(true);
+    setBusy(true);
     setMessage('');
-  }
-
-  async function save() {
     setError('');
     try {
       const result = await api<SpacePermissionDto[]>(`/spaces/${space.key}/permissions`, {
         method: 'PUT',
-        body: { entries: entries.map((e) => ({ type: e.subject.type, id: e.subject.id, role: e.role })) },
+        body: { entries: next.map((e) => ({ type: e.subject.type, id: e.subject.id, role: e.role })) },
       });
       setEntries(result);
-      setDirty(false);
-      setMessage('Rollen gespeichert.');
+      saved.setData(result);
+      setMessage(done);
     } catch (err) {
-      setError(errorMessage(err));
+      setEntries(previous);
+      setError(`${errorMessage(err)} Die Rollen sind unverändert.`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -80,11 +85,28 @@ export function SpacePermissions({ space }: { space: SpaceDto }) {
                   <RoleSelect
                     label={`Rolle für ${subjectLabel(e.subject)}`}
                     value={e.role}
-                    onChange={(role) => change(entries.map((x, j) => (j === i ? { ...x, role } : x)))}
+                    disabled={busy}
+                    onChange={(role) =>
+                      void change(
+                        entries.map((x, j) => (j === i ? { ...x, role } : x)),
+                        `Gespeichert: ${subjectLabel(e.subject)} ist jetzt ${ROLE_LABELS[role]}.`,
+                      )
+                    }
                   />
                 </td>
                 <td>
-                  <button type="button" className="small danger" onClick={() => change(entries.filter((_, j) => j !== i))}>
+                  <button
+                    type="button"
+                    className="small danger"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(`Rolle von ${subjectLabel(e.subject)} entfernen? Ohne Rolle sieht ${e.subject.type === 'group' ? 'die Gruppe' : 'die Person'} den Space nicht mehr.`)) return;
+                      void change(
+                        entries.filter((_, j) => j !== i),
+                        `Gespeichert: ${subjectLabel(e.subject)} hat keine Rolle mehr.`,
+                      );
+                    }}
+                  >
                     Entfernen
                   </button>
                 </td>
@@ -96,17 +118,11 @@ export function SpacePermissions({ space }: { space: SpaceDto }) {
       <SubjectPicker
         directory={directory.data}
         exclude={entries.map((e) => e.subject)}
-        onAdd={(subject) => change([...entries, { subject, role: newRole }])}
+        onAdd={(subject) => void change([...entries, { subject, role: newRole }], `Gespeichert: ${subjectLabel(subject)} ist jetzt ${ROLE_LABELS[newRole]}.`)}
       >
         <RoleSelect label="Rolle für neuen Eintrag" value={newRole} onChange={setNewRole} />
       </SubjectPicker>
-      <p />
-      <div className="row">
-        <button type="button" disabled={!dirty} onClick={save}>
-          Rollen speichern
-        </button>
-      </div>
-      <p />
+      <p className="muted">Änderungen gelten sofort, ein eigenes Speichern ist nicht nötig.</p>
       <Alert kind="success">{message}</Alert>
       <Alert>{error}</Alert>
     </Card>

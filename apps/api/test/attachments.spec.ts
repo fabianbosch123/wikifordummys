@@ -89,6 +89,13 @@ describe('Anhänge hochladen und abrufen', () => {
       expect(get.headers['content-type']).toBe('application/octet-stream');
       expect(get.headers['content-disposition']).toMatch(/^attachment; filename="/);
       expect(get.headers['x-content-type-options']).toBe('nosniff');
+      // Selbst wenn ein Browser den Inhalt doch anzeigte: keine Skripte, kein Einbetten in fremde Seiten
+      expect(get.headers['content-security-policy']).toMatch(/default-src 'none'/);
+      // Ältere Fassungen, auch mit inline=1, kommen ebenso nur zum Herunterladen
+      const version = await raw(anna.client, `/attachments/${res.body.id}/versions/1?inline=1`);
+      expect(version.headers['content-type']).toBe('application/octet-stream');
+      expect(version.headers['content-disposition']).toMatch(/^attachment; filename="/);
+      expect(version.headers['x-content-type-options']).toBe('nosniff');
     }
     const pdf = await anna.client.upload(pageId, 'echt.pdf', Buffer.from('%PDF-1.7\n%…'));
     expect(pdf.body).toMatchObject({ mimeType: 'application/pdf', preview: 'pdf' });

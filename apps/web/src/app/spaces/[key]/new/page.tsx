@@ -7,7 +7,9 @@ import { resolveUploads, uploadPending } from '@/components/editor/uploads';
 import { PageForm } from '@/components/PageForm';
 import { SpaceLayout } from '@/components/SpaceLayout';
 import { api, errorMessage } from '@/lib/api';
+import { Alert } from '@/components/ui';
 import { RequireAuth } from '@/lib/auth';
+import { siblingTitles } from '@/lib/tree';
 
 function NewPage() {
   const { key } = useParams<{ key: string }>();
@@ -18,6 +20,10 @@ function NewPage() {
   return (
     <SpaceLayout spaceKey={key}>
       {(space, tree) => {
+        // Wie beim Bearbeiten gleich beim Laden prüfen, nicht erst beim Anlegen
+        if (!space.canEdit) {
+          return <Alert>{space.status === 'archived' ? 'Der Space ist archiviert, hier lassen sich keine Seiten anlegen.' : 'Du kannst hier keine Seiten anlegen.'}</Alert>;
+        }
         const parent = tree.find((n) => n.id === requestedParent) ?? tree.find((n) => n.id === space.homePageId) ?? null;
         return (
           <>
@@ -27,6 +33,7 @@ function NewPage() {
               initialTitle=""
               initialContent={EMPTY_DOC}
               tree={tree}
+              siblingTitles={siblingTitles(tree, parent?.id ?? null)}
               draftScope={`new:${space.key}:${parent?.id ?? 'root'}`}
               submitLabel="Seite anlegen"
               onCancel={() => router.push(parent ? `/pages/${parent.id}` : `/spaces/${space.key}`)}

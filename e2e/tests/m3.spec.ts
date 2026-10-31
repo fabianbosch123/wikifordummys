@@ -24,9 +24,9 @@ test('Rollen vergeben, Anhänge hochladen, Bild einbinden, Seite einschränken u
   // Rollen: alle-benutzer von Bearbeiter auf Leser herabstufen
   await page.getByRole('link', { name: 'Space-Einstellungen' }).click();
   await expect(page.getByRole('heading', { name: 'Rollen' })).toBeVisible();
+  // Jede Änderung gilt sofort, ohne eigenen Speichern-Knopf (N-3)
   await page.getByLabel('Rolle für Gruppe alle-benutzer').selectOption('viewer');
-  await page.getByRole('button', { name: 'Rollen speichern' }).click();
-  await expect(page.getByText('Rollen gespeichert.')).toBeVisible();
+  await expect(page.getByText('Gespeichert: Gruppe alle-benutzer ist jetzt Leser.')).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Rolle für Gruppe alle-benutzer')).toHaveValue('viewer');
 
