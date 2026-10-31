@@ -9,6 +9,7 @@ import { Alert, formatDate } from '@/components/ui';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useHotkeys, withHotkey } from '@/lib/hotkeys';
+import { sameTitle } from '@/lib/tree';
 import { clearDraft, DISCARD_QUESTION, Draft, draftKey, loadDraft, saveDraft, useLeaveGuard } from '@/lib/unsaved';
 
 // Der Editor läuft nur im Browser
@@ -39,12 +40,26 @@ interface Props {
    */
   onSubmit: (title: string, content: DocNode, force: boolean, files: Map<string, File>) => Promise<void>;
   onCancel: () => void;
+  /** Titel der anderen Seiten unter derselben Elternseite; bei gleichem Titel warnt das Formular */
+  siblingTitles?: string[];
   /** Ein Entwurf wurde übernommen; version ist die Version, auf der er beruht */
   onRestoreDraft?: (version: number | undefined) => void;
 }
 
 /** Titel und Editor mit Speichern, Konfliktanzeige, Entwurf im Browser und Warnung vor ungespeicherten Änderungen */
-export function PageForm({ initialTitle, initialContent, tree, pageId, version, draftScope, submitLabel, onSubmit, onCancel, onRestoreDraft }: Props) {
+export function PageForm({
+  initialTitle,
+  initialContent,
+  tree,
+  pageId,
+  version,
+  draftScope,
+  submitLabel,
+  onSubmit,
+  onCancel,
+  onRestoreDraft,
+  siblingTitles = [],
+}: Props) {
   const { state } = useAuth();
   const userId = state?.user?.id ?? 'anon';
   const storageKey = draftKey(userId, draftScope);
@@ -121,9 +136,17 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, version, 
     setDraft(null);
   }
 
+  const duplicate = title.trim() !== '' && !sameTitle(title, initialTitle) && siblingTitles.some((t) => sameTitle(t, title));
+  // Einmal bestätigt, fragt das Formular für diesen Titel nicht noch einmal
+  const confirmedDuplicate = useRef('');
+
   async function save(force = false) {
     // Halb hochgeladene Dateien hätten nur Platzhalter im Inhalt
     if (uploads.busy) return;
+    if (duplicate && confirmedDuplicate.current !== title.trim()) {
+      if (!window.confirm(`Unter derselben Seite gibt es schon eine Seite „${title.trim()}“. Trotzdem mit diesem Titel speichern?`)) return;
+      confirmedDuplicate.current = title.trim();
+    }
     setBusy(true);
     setError('');
     setExpired(false);
@@ -200,7 +223,7 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, version, 
           className="title-input"
           required
           maxLength={PAGE_TITLE_MAX_LENGTH}
-          aria-describedby="page-title-count"
+          aria-describedby={duplicate ? 'page-title-count page-title-duplicate' : 'page-title-count'}
           value={title}
           onPaste={pasteTitle}
           onChange={(e) => {
@@ -213,6 +236,11 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, version, 
           {title.length} / {PAGE_TITLE_MAX_LENGTH} Zeichen
           {titleCut && ' · Der eingefügte Text war zu lang und wurde gekürzt.'}
         </small>
+        {duplicate && (
+          <small id="page-title-duplicate" className="field-warning" role="status">
+            Unter derselben Seite gibt es schon eine Seite mit diesem Titel. Ein anderer Titel hilft beim Wiederfinden.
+          </small>
+        )}
       </div>
       <WikiEditor
         key={editorStart.n}

@@ -12,7 +12,7 @@ import { Alert } from '@/components/ui';
 import { errorMessage, uploadAttachment } from '@/lib/api';
 import { useApiData } from '@/lib/data';
 import { HOTKEYS, withHotkey, type HotkeyId } from '@/lib/hotkeys';
-import { flattenTree } from '@/lib/tree';
+import { flattenTree, type TreeOption } from '@/lib/tree';
 import { Callout } from './callout';
 import { DrawioDialog } from './DrawioDialog';
 import { ImageForm, LinkForm } from './InsertForms';
@@ -96,7 +96,7 @@ const CALLOUTS: { variant: CalloutVariant; label: string; icon: string }[] = [
   { variant: 'note', label: 'Notizbox', icon: '✎' },
 ];
 
-function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: { id: string; label: string }[]; onClose: () => void }) {
+function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: TreeOption[]; onClose: () => void }) {
   const [pageId, setPageId] = useState(pages[0]?.id ?? '');
   function insert() {
     const target = pages.find((p) => p.id === pageId);
@@ -104,7 +104,7 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: { i
     const href = `/pages/${target.id}`;
     const chain = editor.chain().focus();
     if (editor.state.selection.empty) {
-      chain.insertContent({ type: 'text', text: target.label.trim(), marks: [{ type: 'link', attrs: { href } }] }).run();
+      chain.insertContent({ type: 'text', text: target.title.trim(), marks: [{ type: 'link', attrs: { href } }] }).run();
     } else {
       chain.extendMarkRange('link').setLink({ href }).run();
     }
