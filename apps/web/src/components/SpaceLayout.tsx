@@ -26,6 +26,8 @@ export function SpaceLayout({
   const space = useApiData<SpaceDto>(`/spaces/${encodeURIComponent(spaceKey)}`);
   const tree = useApiData<TreeNodeDto[]>(`/spaces/${encodeURIComponent(spaceKey)}/tree`);
   const [error, setError] = useState('');
+  // Auf schmalen Bildschirmen ist der Seitenbaum zugeklappt, damit der Inhalt zuerst kommt
+  const [treeOpen, setTreeOpen] = useState(false);
   const reloadTree = tree.reload;
 
   useEffect(() => {
@@ -56,22 +58,33 @@ export function SpaceLayout({
           </Link>
           <span className="badge">{s.key}</span>
           {s.status === 'archived' && <span className="badge warn">archiviert</span>}
+          <button
+            type="button"
+            className="small secondary sidebar-toggle"
+            aria-expanded={treeOpen}
+            aria-controls="sidebar-body"
+            onClick={() => setTreeOpen(!treeOpen)}
+          >
+            {treeOpen ? 'Seitenbaum ausblenden' : 'Seitenbaum zeigen'}
+          </button>
         </div>
-        {s.canEdit && (
-          <p>
-            <Link className="button small" href={`/spaces/${s.key}/new${currentId ? `?parent=${currentId}` : ''}`}>
-              + Neue Seite
-            </Link>
-          </p>
-        )}
-        <PageTree spaceKey={s.key} nodes={tree.data} currentId={currentId} homePageId={s.homePageId} canEdit={s.canEdit} onMove={move} />
-        <Alert>{error}</Alert>
-        {s.role === 'admin' && (
-          <p className="sidebar-foot">
-            <Link href={`/spaces/${s.key}/settings`}>Space-Einstellungen</Link>
-            <Link href={`/spaces/${s.key}/trash`}>Papierkorb</Link>
-          </p>
-        )}
+        <div id="sidebar-body" className={`sidebar-body${treeOpen ? ' open' : ''}`}>
+          {s.canEdit && (
+            <p>
+              <Link className="button small" href={`/spaces/${s.key}/new${currentId ? `?parent=${currentId}` : ''}`}>
+                + Neue Seite
+              </Link>
+            </p>
+          )}
+          <PageTree spaceKey={s.key} nodes={tree.data} currentId={currentId} homePageId={s.homePageId} canEdit={s.canEdit} onMove={move} />
+          <Alert>{error}</Alert>
+          {s.role === 'admin' && (
+            <p className="sidebar-foot">
+              <Link href={`/spaces/${s.key}/settings`}>Space-Einstellungen</Link>
+              <Link href={`/spaces/${s.key}/trash`}>Papierkorb</Link>
+            </p>
+          )}
+        </div>
       </aside>
       <div className="space-content">{typeof children === 'function' ? children(s, tree.data) : children}</div>
     </div>

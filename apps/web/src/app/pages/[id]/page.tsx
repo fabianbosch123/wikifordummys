@@ -9,7 +9,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RestrictionsDialog } from '@/components/RestrictionsDialog';
 import { RichText } from '@/components/RichText';
 import { SpaceLayout } from '@/components/SpaceLayout';
-import { Alert, formatDate } from '@/components/ui';
+import { Alert, DialogPanel, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
@@ -41,7 +41,7 @@ function MoveDialog({ page, tree, onDone, onCancel }: { page: PageDto; tree: Tre
   }
 
   return (
-    <div className="card">
+    <DialogPanel title="Verschieben" onClose={onCancel}>
       <div className="field">
         <label htmlFor="move-parent">Neue übergeordnete Seite</label>
         <select id="move-parent" value={parentId} onChange={(e) => setParentId(e.target.value)}>
@@ -62,7 +62,7 @@ function MoveDialog({ page, tree, onDone, onCancel }: { page: PageDto; tree: Tre
           Abbrechen
         </button>
       </p>
-    </div>
+    </DialogPanel>
   );
 }
 
@@ -134,8 +134,12 @@ function PageView() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const page = useApiData<PageDto>(`/pages/${id}`);
-  const [moving, setMoving] = useState(false);
-  const [restricting, setRestricting] = useState(false);
+  // Immer nur ein Panel offen
+  const [panel, setPanel] = useState<'move' | 'restrict' | null>(null);
+  const moving = panel === 'move';
+  const restricting = panel === 'restrict';
+  const setMoving = (open: boolean) => setPanel(open ? 'move' : null);
+  const setRestricting = (open: boolean) => setPanel(open ? 'restrict' : null);
   const [treeVersion, setTreeVersion] = useState(0);
   const [error, setError] = useState('');
   const [deleted, setDeleted] = useState<DeletedFlash | null>(null);
@@ -184,12 +188,12 @@ function PageView() {
                 Verlauf
               </Link>
               {p.canEdit && !p.isHome && (
-                <button className="small secondary" onClick={() => setMoving(!moving)}>
+                <button className="small secondary" aria-expanded={moving} onClick={() => setMoving(!moving)}>
                   Verschieben
                 </button>
               )}
               {p.canRestrict && (
-                <button className="small secondary" onClick={() => setRestricting(!restricting)}>
+                <button className="small secondary" aria-expanded={restricting} onClick={() => setRestricting(!restricting)}>
                   Einschränkungen
                 </button>
               )}

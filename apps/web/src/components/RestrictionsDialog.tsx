@@ -4,7 +4,7 @@ import type { DirectoryDto, PageDto, PageRestrictionsDto, RestrictionType, Subje
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SubjectPicker, subjectLabel } from '@/components/SubjectPicker';
-import { Alert } from '@/components/ui';
+import { Alert, DialogPanel } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { useApiData } from '@/lib/data';
 
@@ -101,39 +101,44 @@ export function RestrictionsDialog({ page, onDone, onCancel }: { page: PageDto; 
     }
   }
 
-  if (current.error) return <Alert>{errorMessage(current.error)}</Alert>;
-  if (!current.data || !directory.data) return <p className="muted">Lade Einschränkungen …</p>;
-
+  const loaded = !!current.data && !!directory.data;
   return (
-    <div className="card">
-      <h2>Einschränkungen</h2>
-      {current.data.inherited.length > 0 && (
-        <Alert kind="info">
-          Zusätzlich gelten Einschränkungen von übergeordneten Seiten:{' '}
-          {current.data.inherited.map((i, n) => (
-            <span key={`${i.pageId}:${i.type}`}>
-              {n > 0 && ', '}
-              <Link href={`/pages/${i.pageId}`}>{i.title}</Link> ({LABELS[i.type].title})
-            </span>
-          ))}
-        </Alert>
+    <DialogPanel title="Einschränkungen" ready={loaded} onClose={cancel}>
+      {current.error ? (
+        <Alert>{errorMessage(current.error)}</Alert>
+      ) : !current.data || !directory.data ? (
+        <p className="muted">Lade Einschränkungen …</p>
+      ) : (
+        <>
+          {current.data.inherited.length > 0 && (
+            <Alert kind="info">
+              Zusätzlich gelten Einschränkungen von übergeordneten Seiten:{' '}
+              {current.data.inherited.map((i, n) => (
+                <span key={`${i.pageId}:${i.type}`}>
+                  {n > 0 && ', '}
+                  <Link href={`/pages/${i.pageId}`}>{i.title}</Link> ({LABELS[i.type].title})
+                </span>
+              ))}
+            </Alert>
+          )}
+          <SubjectList type="view" subjects={view} directory={directory.data} onChange={changeView} />
+          <SubjectList type="edit" subjects={edit} directory={directory.data} onChange={changeEdit} />
+          <Alert>{error}</Alert>
+          <p className="row">
+            <button className="small" onClick={save}>
+              Einschränkungen speichern
+            </button>
+            <button className="small secondary" onClick={cancel}>
+              Abbrechen
+            </button>
+            {dirty && (
+              <span className="unsaved" role="status">
+                Noch nicht gespeichert: Die Änderungen gelten erst nach „Einschränkungen speichern“.
+              </span>
+            )}
+          </p>
+        </>
       )}
-      <SubjectList type="view" subjects={view} directory={directory.data} onChange={changeView} />
-      <SubjectList type="edit" subjects={edit} directory={directory.data} onChange={changeEdit} />
-      <Alert>{error}</Alert>
-      <p className="row">
-        <button className="small" onClick={save}>
-          Einschränkungen speichern
-        </button>
-        <button className="small secondary" onClick={cancel}>
-          Abbrechen
-        </button>
-        {dirty && (
-          <span className="unsaved" role="status">
-            Noch nicht gespeichert: Die Änderungen gelten erst nach „Einschränkungen speichern“.
-          </span>
-        )}
-      </p>
-    </div>
+    </DialogPanel>
   );
 }

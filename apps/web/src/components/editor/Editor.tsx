@@ -4,15 +4,18 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { COLUMN_WIDTH, FONT_FAMILIES, IMAGE_SIZE, isFontFamilyId, isSafeImageSrc, isSafeLinkHref, type CalloutVariant, type DocNode, type FeaturesDto, type TreeNodeDto } from '@wiki/shared';
+import { COLUMN_WIDTH, FONT_FAMILIES, IMAGE_SIZE, isFontFamilyId, isSafeLinkHref, type CalloutVariant, type DocNode, type FeaturesDto, type TreeNodeDto } from '@wiki/shared';
 import DOMPurify from 'dompurify';
 import type { EditorView } from '@tiptap/pm/view';
-import { ChangeEvent, ReactNode, useContext, useRef, useState } from 'react';
+import { ChangeEvent, KeyboardEvent, ReactNode, useContext, useRef, useState } from 'react';
+import { Alert } from '@/components/ui';
 import { errorMessage, uploadAttachment } from '@/lib/api';
 import { useApiData } from '@/lib/data';
+import { HOTKEYS, withHotkey, type HotkeyId } from '@/lib/hotkeys';
 import { flattenTree, type TreeOption } from '@/lib/tree';
 import { Callout } from './callout';
 import { DrawioDialog } from './DrawioDialog';
+import { ImageForm, LinkForm } from './InsertForms';
 import { Font } from './font';
 import { askDrawingTitle, Drawing, DrawingContext } from './drawing';
 import { NewOfficeFile } from './NewOfficeFile';
@@ -50,12 +53,15 @@ export const editorExtensions = [
 
 function ToolButton({
   label,
+  hotkey,
   active,
   disabled,
   onClick,
   children,
 }: {
   label: string;
+  /** Tastenkürzel aus hotkeys.ts, erscheint im Tooltip */
+  hotkey?: HotkeyId;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -65,8 +71,9 @@ function ToolButton({
     <button
       type="button"
       className={`tool${active ? ' active' : ''}`}
-      title={label}
+      title={hotkey ? withHotkey(label, hotkey) : label}
       aria-label={label}
+      aria-keyshortcuts={hotkey ? HOTKEY_ARIA[hotkey] : undefined}
       aria-pressed={active}
       disabled={disabled}
       // Fokus im Editor behalten
@@ -77,6 +84,10 @@ function ToolButton({
     </button>
   );
 }
+
+/** aria-keyshortcuts braucht die englischen Tastennamen */
+const ariaKeys = (label: string) => label.replace('Strg', 'Control').replace('Umschalt', 'Shift');
+const HOTKEY_ARIA = Object.fromEntries(Object.entries(HOTKEYS).map(([id, def]) => [id, ariaKeys(def.label)])) as Record<HotkeyId, string>;
 
 const CALLOUTS: { variant: CalloutVariant; label: string; icon: string }[] = [
   { variant: 'info', label: 'Infobox', icon: 'ℹ' },
@@ -99,8 +110,15 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: Tre
     }
     onClose();
   }
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    onClose();
+    editor.commands.focus();
+  }
   return (
-    <div className="row picker">
+    <div className="row picker" onKeyDown={onKeyDown}>
       <label htmlFor="page-link-target">Seite</label>
       <select id="page-link-target" value={pageId} onChange={(e) => setPageId(e.target.value)}>
         {pages.map((p) => (
@@ -121,6 +139,9 @@ function PageLinkPicker({ editor, pages, onClose }: { editor: Editor; pages: Tre
 
 function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: TreeNodeDto[]; pageId?: string; office: boolean }) {
   const [picker, setPicker] = useState(false);
+  const [linkForm, setLinkForm] = useState(false);
+  const [imageForm, setImageForm] = useState<{ uploaded?: { src: string; name: string } } | null>(null);
+  const [notice, setNotice] = useState('');
   const [officePicker, setOfficePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newDrawing, setNewDrawing] = useState<string | null>(null);
@@ -131,6 +152,7 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
     selector: ({ editor: e }) => ({
       bold: e.isActive('bold'),
       italic: e.isActive('italic'),
+      underline: e.isActive('underline'),
       strike: e.isActive('strike'),
       code: e.isActive('code'),
       link: e.isActive('link'),
@@ -150,30 +172,12 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
   });
   const chain = () => editor.chain().focus();
 
-  function setLink() {
-    const previous = editor.getAttributes('link').href as string | undefined;
-    const url = window.prompt('Adresse des Links (https://… oder /pages/…); leer lassen zum Entfernen', previous ?? 'https://');
-    if (url === null) return;
-    if (url.trim() === '') {
-      chain().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-    if (!isSafeLinkHref(url.trim())) {
-      window.alert('Diese Adresse ist nicht erlaubt. Erlaubt sind https://, http://, mailto: und Pfade im Wiki.');
-      return;
-    }
-    chain().extendMarkRange('link').setLink({ href: url.trim() }).run();
-  }
-
-  function addImage() {
-    const src = window.prompt('Adresse des Bildes (https://…)', 'https://');
-    if (!src) return;
-    if (!isSafeImageSrc(src.trim())) {
-      window.alert('Bilder sind nur über https:// erlaubt. Eigene Bilder lassen sich hochladen.');
-      return;
-    }
-    const alt = window.prompt('Kurze Beschreibung des Bildes (für Screenreader)') ?? '';
-    chain().setImage({ src: src.trim(), alt }).run();
+  /** Nur ein Einfügeformular gleichzeitig */
+  function openForm(which: 'link' | 'image' | 'page' | null, uploaded?: { src: string; name: string }) {
+    setLinkForm(which === 'link');
+    setImageForm(which === 'image' ? { uploaded } : null);
+    setPicker(which === 'page');
+    setNotice('');
   }
 
   /** Lädt ein Bild als Anhang der Seite hoch und bindet es ein */
@@ -182,16 +186,16 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
     e.target.value = '';
     if (!file || !pageId) return;
     setUploading(true);
+    setNotice('');
     try {
       const attachment = await uploadAttachment(pageId, file);
       if (attachment.preview !== 'image') {
-        window.alert('Die Datei wurde als Anhang gespeichert, ist aber kein Bild (PNG, JPEG, GIF oder WebP) und wird nicht eingebunden.');
+        setNotice('Die Datei wurde als Anhang gespeichert, ist aber kein Bild (PNG, JPEG, GIF oder WebP) und wird nicht eingebunden.');
         return;
       }
-      const alt = window.prompt('Kurze Beschreibung des Bildes (für Screenreader)') ?? '';
-      chain().setImage({ src: attachment.url, alt }).run();
+      openForm('image', { src: attachment.url, name: attachment.filename });
     } catch (err) {
-      window.alert(errorMessage(err));
+      setNotice(errorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -206,33 +210,36 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
   return (
     <div className="toolbar-wrap">
       <div className="toolbar" role="toolbar" aria-label="Formatierung">
-        <ToolButton label="Rückgängig" disabled={!s.canUndo} onClick={() => chain().undo().run()}>
+        <ToolButton label="Rückgängig" hotkey="undo" disabled={!s.canUndo} onClick={() => chain().undo().run()}>
           ↶
         </ToolButton>
-        <ToolButton label="Wiederholen" disabled={!s.canRedo} onClick={() => chain().redo().run()}>
+        <ToolButton label="Wiederholen" hotkey="redo" disabled={!s.canRedo} onClick={() => chain().redo().run()}>
           ↷
         </ToolButton>
         <span className="sep" />
-        <ToolButton label="Überschrift 1" active={s.h1} onClick={() => chain().toggleHeading({ level: 1 }).run()}>
+        <ToolButton label="Überschrift 1" hotkey="heading1" active={s.h1} onClick={() => chain().toggleHeading({ level: 1 }).run()}>
           H1
         </ToolButton>
-        <ToolButton label="Überschrift 2" active={s.h2} onClick={() => chain().toggleHeading({ level: 2 }).run()}>
+        <ToolButton label="Überschrift 2" hotkey="heading2" active={s.h2} onClick={() => chain().toggleHeading({ level: 2 }).run()}>
           H2
         </ToolButton>
-        <ToolButton label="Überschrift 3" active={s.h3} onClick={() => chain().toggleHeading({ level: 3 }).run()}>
+        <ToolButton label="Überschrift 3" hotkey="heading3" active={s.h3} onClick={() => chain().toggleHeading({ level: 3 }).run()}>
           H3
         </ToolButton>
         <span className="sep" />
-        <ToolButton label="Fett" active={s.bold} onClick={() => chain().toggleBold().run()}>
+        <ToolButton label="Fett" hotkey="bold" active={s.bold} onClick={() => chain().toggleBold().run()}>
           <b>B</b>
         </ToolButton>
-        <ToolButton label="Kursiv" active={s.italic} onClick={() => chain().toggleItalic().run()}>
+        <ToolButton label="Kursiv" hotkey="italic" active={s.italic} onClick={() => chain().toggleItalic().run()}>
           <i>I</i>
         </ToolButton>
-        <ToolButton label="Durchgestrichen" active={s.strike} onClick={() => chain().toggleStrike().run()}>
+        <ToolButton label="Unterstrichen" hotkey="underline" active={s.underline} onClick={() => chain().toggleUnderline().run()}>
+          <u>U</u>
+        </ToolButton>
+        <ToolButton label="Durchgestrichen" hotkey="strike" active={s.strike} onClick={() => chain().toggleStrike().run()}>
           <s>S</s>
         </ToolButton>
-        <ToolButton label="Code" active={s.code} onClick={() => chain().toggleCode().run()}>
+        <ToolButton label="Code" hotkey="code" active={s.code} onClick={() => chain().toggleCode().run()}>
           {'</>'}
         </ToolButton>
         <select
@@ -254,16 +261,16 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
           ))}
         </select>
         <span className="sep" />
-        <ToolButton label="Aufzählung" active={s.bulletList} onClick={() => chain().toggleBulletList().run()}>
+        <ToolButton label="Aufzählung" hotkey="bulletList" active={s.bulletList} onClick={() => chain().toggleBulletList().run()}>
           • Liste
         </ToolButton>
-        <ToolButton label="Nummerierte Liste" active={s.orderedList} onClick={() => chain().toggleOrderedList().run()}>
+        <ToolButton label="Nummerierte Liste" hotkey="orderedList" active={s.orderedList} onClick={() => chain().toggleOrderedList().run()}>
           1. Liste
         </ToolButton>
-        <ToolButton label="Zitat" active={s.blockquote} onClick={() => chain().toggleBlockquote().run()}>
+        <ToolButton label="Zitat" hotkey="blockquote" active={s.blockquote} onClick={() => chain().toggleBlockquote().run()}>
           ❝
         </ToolButton>
-        <ToolButton label="Code-Block" active={s.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>
+        <ToolButton label="Code-Block" hotkey="codeBlock" active={s.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>
           {'{ }'}
         </ToolButton>
         <ToolButton label="Trennlinie" onClick={() => chain().setHorizontalRule().run()}>
@@ -276,13 +283,13 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
           </ToolButton>
         ))}
         <span className="sep" />
-        <ToolButton label="Link" active={s.link} onClick={setLink}>
+        <ToolButton label={s.link ? 'Link bearbeiten' : 'Link'} active={s.link || linkForm} onClick={() => openForm(linkForm ? null : 'link')}>
           🔗
         </ToolButton>
-        <ToolButton label="Seite verlinken" onClick={() => setPicker(!picker)} disabled={pages.length === 0}>
+        <ToolButton label="Seite verlinken" active={picker} onClick={() => openForm(picker ? null : 'page')} disabled={pages.length === 0}>
           ↪ Seite
         </ToolButton>
-        <ToolButton label="Bild über Adresse einbinden" onClick={addImage}>
+        <ToolButton label="Bild über Adresse einbinden" active={imageForm !== null && !imageForm.uploaded} onClick={() => openForm(imageForm ? null : 'image')}>
           🖼
         </ToolButton>
         {pageId && (
@@ -355,6 +362,13 @@ function Toolbar({ editor, pages, pageId, office }: { editor: Editor; pages: Tre
         </div>
       )}
       {picker && <PageLinkPicker editor={editor} pages={flattenTree(pages)} onClose={() => setPicker(false)} />}
+      {linkForm && <LinkForm editor={editor} onClose={() => setLinkForm(false)} />}
+      {imageForm && <ImageForm key={imageForm.uploaded?.src ?? 'url'} editor={editor} uploaded={imageForm.uploaded} onClose={() => setImageForm(null)} />}
+      {notice && (
+        <div className="insert-panel">
+          <Alert>{notice}</Alert>
+        </div>
+      )}
     </div>
   );
 }
