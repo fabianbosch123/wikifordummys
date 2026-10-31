@@ -86,6 +86,15 @@ test('N-1/N-2: Rückfrage bei Links in der App, Entwurf im Browser, Hinweis bei 
   await page.getByRole('link', { name: 'Start' }).click();
   await expect(editor).toBeHidden();
   expect(dialogs.length).toBe(before);
+
+  // Abmelden mit offenen Änderungen: nach der Rückfrage bleibt kein Entwurf im Tab zurück
+  await page.goto(editUrl);
+  await editor.click();
+  await page.keyboard.type(' Vertraulich');
+  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith('wiki.draft.')).length)).toBe(1);
+  await page.getByRole('button', { name: 'Abmelden' }).click();
+  await expect(page).toHaveURL(/\/login/);
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith('wiki.draft.')))).toEqual([]);
 });
 
 test('N-7: Verschieben und Einschränkungen schließen mit Escape, nehmen den Fokus, nur eins ist offen', async ({ page }) => {

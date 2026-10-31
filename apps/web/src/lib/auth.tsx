@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from './api';
 import { applyTheme } from './theme';
-import { clearAllDrafts } from './unsaved';
+import { clearAllDrafts, unlockDrafts } from './unsaved';
 
 interface AuthState {
   state: SessionStateDto | null;
@@ -27,10 +27,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Entwürfe enthalten Seiteninhalte; nach dem Abmelden soll an diesem Browser nichts davon übrig bleiben.
+    // Vor dem Umschalten des Zustands, damit der Editor beim Aushängen nichts mehr sichert.
+    clearAllDrafts();
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setState({ authenticated: false, stage: null, user: null });
-    // Entwürfe enthalten Seiteninhalte; nach dem Abmelden soll an diesem Browser nichts davon übrig bleiben
-    clearAllDrafts();
     // Die Darstellung gehört zum Konto; der nächste Benutzer an diesem Browser startet mit der System-Einstellung
     applyTheme('system');
   }, []);
@@ -54,6 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh().catch(() => setState({ authenticated: false, stage: null, user: null }));
   }, [refresh]);
+
+  // Entwürfe gehören zum angemeldeten Benutzer; fremde aus diesem Tab verschwinden
+  const userId = state?.authenticated && state.stage === 'full' ? state.user?.id : undefined;
+  useEffect(() => {
+    if (userId) unlockDrafts(userId);
+  }, [userId]);
 
   // Nach der Anmeldung gilt die im Konto gespeicherte Darstellung, auch auf einem neuen Gerät
   const theme = state?.user?.theme;

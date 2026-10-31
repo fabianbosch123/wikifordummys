@@ -1,6 +1,6 @@
 'use client';
 
-import type { DocNode } from '@wiki/shared';
+import { sanitizeDoc, type DocNode } from '@wiki/shared';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -95,6 +95,11 @@ const PREFIX = 'wiki.draft.';
 const MAX_DRAFT_CHARS = 2_000_000;
 /** Ältere Entwürfe gelten als verworfen */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Nach dem Abmelden bis zur nächsten Anmeldung gesperrt: Der Editor sichert beim Aushängen noch einmal,
+ * das darf nach clearAllDrafts() nichts mehr zurückschreiben.
+ */
+let locked = false;
 
 export interface Draft {
   title: string;
@@ -122,13 +127,22 @@ export function loadDraft(key: string): Draft | null {
       window.sessionStorage.removeItem(key);
       return null;
     }
-    return { title: d.title, content: d.content, version: typeof d.version === 'number' ? d.version : undefined, savedAt: d.savedAt };
+    // Dieselbe Inhalts-Whitelist wie für Inhalte von der API (S6); was sie nicht besteht, wird verworfen
+    let content: DocNode;
+    try {
+      content = sanitizeDoc(d.content);
+    } catch {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return { title: d.title.slice(0, 500), content, version: typeof d.version === 'number' ? d.version : undefined, savedAt: d.savedAt };
   } catch {
     return null;
   }
 }
 
 export function saveDraft(key: string, draft: Omit<Draft, 'savedAt'>): void {
+  if (locked) return;
   try {
     const raw = JSON.stringify({ ...draft, savedAt: Date.now() });
     if (raw.length > MAX_DRAFT_CHARS) return;
@@ -146,13 +160,24 @@ export function clearDraft(key: string): void {
   }
 }
 
-/** Beim Abmelden: alle Entwürfe dieses Browser-Tabs löschen */
+/** Beim Abmelden: alle Entwürfe dieses Browser-Tabs löschen und bis zur nächsten Anmeldung keine neuen anlegen */
 export function clearAllDrafts(): void {
+  locked = true;
+  removeDrafts(() => true);
+}
+
+/** Nach der Anmeldung: Entwürfe wieder erlauben und die anderer Benutzer (z. B. nach abgelaufener Sitzung) löschen */
+export function unlockDrafts(userId: string): void {
+  locked = false;
+  removeDrafts((k) => !k.startsWith(`${PREFIX}${userId}.`));
+}
+
+function removeDrafts(match: (key: string) => boolean): void {
   try {
     const keys: string[] = [];
     for (let i = 0; i < window.sessionStorage.length; i++) {
       const k = window.sessionStorage.key(i);
-      if (k?.startsWith(PREFIX)) keys.push(k);
+      if (k?.startsWith(PREFIX) && match(k)) keys.push(k);
     }
     for (const k of keys) window.sessionStorage.removeItem(k);
   } catch {
