@@ -22,6 +22,7 @@ export function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () =
       <p>
         <CopyButtons text={text} label="Codes kopieren" filename="wiki-wiederherstellungscodes.txt" />
       </p>
+      <p className="muted">Die Datei am besten im Passwortmanager ablegen und danach löschen.</p>
       <label className="row">
         <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         Ich habe die Codes gesichert.
