@@ -18,7 +18,9 @@ test('Konto: lesbare Geräte, Wiederherstellungscodes kopieren und herunterladen
   await expect(devices.getByText('Mozilla/5.0')).toHaveCount(0);
 
   // N-15: neue Codes erzeugen, kopieren und als Datei speichern
-  await page.getByLabel('Code aus der App').fill(nextCode(secret));
+  // Das Feld gibt es auch bei den API-Tokens (wenn MCP eingeschaltet ist), deshalb auf die Karte beschränken
+  const recovery = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Wiederherstellungscodes' }) });
+  await recovery.getByLabel('Code aus der App').fill(nextCode(secret));
   await page.getByRole('button', { name: 'Neue Codes erzeugen' }).click();
   await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
   const codes = (await page.getByTestId('recovery-codes').locator('li').allTextContents()).map((c) => c.trim());

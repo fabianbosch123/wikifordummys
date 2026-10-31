@@ -6,6 +6,7 @@ import { FormEvent, ReactNode, useState } from 'react';
 import type { ThemePreference } from '@wiki/shared';
 import { useAuth } from '@/lib/auth';
 import { THEME_LABELS } from '@/lib/theme';
+import { confirmLeave } from '@/lib/unsaved';
 
 /** Umschalter in der Kopfzeile: System → Hell → Dunkel → System */
 const NEXT_THEME: Record<ThemePreference, ThemePreference> = { system: 'light', light: 'dark', dark: 'system' };
@@ -27,6 +28,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   function search(e: FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
+    // Suchen verlässt die Seite: ungespeicherte Änderungen im Editor nicht stillschweigend verwerfen
+    if (!confirmLeave()) return;
     router.push(`/search?${new URLSearchParams({ q: query.trim() })}`);
     setQuery('');
   }
@@ -74,6 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               className="link"
               onClick={async () => {
+                if (!confirmLeave()) return;
                 await logout();
                 router.replace('/login');
               }}

@@ -11,8 +11,8 @@ test('Rollen vergeben, Anhänge hochladen, Bild einbinden, Seite einschränken u
   page.on('console', (msg) => {
     if (/Content Security Policy/i.test(msg.text())) cspViolations.push(msg.text());
   });
-  // Bildbeschreibung im Editor und Bestätigungen
-  page.on('dialog', (dialog) => dialog.accept(dialog.type() === 'prompt' ? 'Logo der Firma' : undefined));
+  // Bestätigungen
+  page.on('dialog', (dialog) => dialog.accept());
 
   await acceptInviteAndSetup2fa(page, createAdminViaCli(`rechte-${run}@example.de`));
 
@@ -56,6 +56,9 @@ test('Rollen vergeben, Anhänge hochladen, Bild einbinden, Seite einschränken u
   await page.getByRole('textbox', { name: 'Seiteninhalt' }).click();
   await page.keyboard.press('End');
   await page.locator('input[type=file][accept^="image/"]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  // Beschreibung im Formular unter der Werkzeugleiste (kein Browser-Popup mehr)
+  await page.getByLabel('Kurze Beschreibung (für Screenreader)').fill('Logo der Firma');
+  await page.getByRole('button', { name: 'Einfügen', exact: true }).click();
   await expect(page.locator('.editor-content img')).toHaveAttribute('src', /^\/api\/v1\/attachments\//);
   await page.getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Druckeranleitung' })).toBeVisible();

@@ -36,6 +36,12 @@ function EditPage() {
             initialContent={p.content}
             tree={tree}
             pageId={p.id}
+            version={p.version}
+            draftScope={`page:${p.id}`}
+            onRestoreDraft={(v) => {
+              // Auf der Version des Entwurfs weiterarbeiten: hat jemand inzwischen gespeichert, meldet das Speichern den Konflikt
+              if (v !== undefined) baseVersion.current = v;
+            }}
             submitLabel="Speichern"
             onCancel={() => router.push(`/pages/${p.id}`)}
             onSubmit={async (title, content, force) => {
