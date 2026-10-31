@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from './api';
 import { applyTheme } from './theme';
+import { clearAllDrafts } from './unsaved';
 
 interface AuthState {
   state: SessionStateDto | null;
@@ -28,6 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setState({ authenticated: false, stage: null, user: null });
+    // Entwürfe enthalten Seiteninhalte; nach dem Abmelden soll an diesem Browser nichts davon übrig bleiben
+    clearAllDrafts();
     // Die Darstellung gehört zum Konto; der nächste Benutzer an diesem Browser startet mit der System-Einstellung
     applyTheme('system');
   }, []);

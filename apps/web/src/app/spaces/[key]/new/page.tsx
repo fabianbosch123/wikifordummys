@@ -27,6 +27,7 @@ function NewPage() {
               initialTitle=""
               initialContent={EMPTY_DOC}
               tree={tree}
+              draftScope={`new:${space.key}:${parent?.id ?? 'root'}`}
               submitLabel="Seite anlegen"
               onCancel={() => router.push(parent ? `/pages/${parent.id}` : `/spaces/${space.key}`)}
               onSubmit={async (title, content, _force, files) => {
