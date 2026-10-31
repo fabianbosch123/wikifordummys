@@ -1,6 +1,6 @@
 'use client';
 
-import type { SearchHitDto, SearchResultDto, SpaceDto } from '@wiki/shared';
+import type { AttachmentHitDto, SearchHitDto, SearchResultDto, SpaceDto } from '@wiki/shared';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useState } from 'react';
@@ -15,6 +15,13 @@ function Snippet({ parts }: { parts: SearchHitDto['snippet'] }) {
   return <p className="muted">{parts.map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</p>;
 }
 
+/** Space und übergeordnete Seiten, z. B. „IT-Team › Anleitungen“; unterscheidet Seiten mit gleichem Titel */
+function Location({ spaceName, path }: { spaceName: string; path: string[] }) {
+  // Die Startseite heißt meist wie der Space: dann nicht doppelt nennen
+  const parts = path[0] === spaceName ? path : [spaceName, ...path];
+  return <span className="search-path">{parts.join(' › ')}</span>;
+}
+
 function Search() {
   const params = useSearchParams();
   const router = useRouter();
@@ -23,6 +30,7 @@ function Search() {
   const spaces = useApiData<SpaceDto[]>('/spaces');
   const [input, setInput] = useState(q);
   const [results, setResults] = useState<SearchHitDto[] | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentHitDto[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,12 +38,14 @@ function Search() {
 
   useEffect(() => {
     setResults(null);
+    setAttachments([]);
     setError('');
     if (!q.trim()) return;
     const query = new URLSearchParams({ q, ...(space ? { space } : {}) });
     api<SearchResultDto>(`/search?${query}`)
       .then((r) => {
         setResults(r.results);
+        setAttachments(r.attachments ?? []);
         setHasMore(r.hasMore);
       })
       .catch((err) => setError(errorMessage(err)));
@@ -90,7 +100,7 @@ function Search() {
       </form>
       <Alert>{error}</Alert>
       {q && !results && !error && <p className="muted">Suche …</p>}
-      {results?.length === 0 && <p className="muted">Keine Treffer für „{q}“.</p>}
+      {results?.length === 0 && attachments.length === 0 && <p className="muted">Keine Treffer für „{q}“.</p>}
       {results && results.length > 0 && (
         <ul className="search-results" aria-label="Suchergebnisse">
           {results.map((r) => (
@@ -101,11 +111,32 @@ function Search() {
               <span className="badge">{r.spaceKey}</span>
               <Snippet parts={r.snippet} />
               <small className="muted">
-                {r.spaceName} · geändert {formatDate(r.updatedAt)}
+                <Location spaceName={r.spaceName} path={r.path} /> · geändert {formatDate(r.updatedAt)}
               </small>
             </li>
           ))}
         </ul>
+      )}
+      {attachments.length > 0 && (
+        <>
+          <h2>Anhänge</h2>
+          <ul className="search-results" aria-label="Gefundene Anhänge">
+            {attachments.map((a) => (
+              <li key={a.id}>
+                <a className="title" href={`${a.url}?download=1`}>
+                  {a.filename}
+                </a>{' '}
+                <span className="badge">{a.spaceKey}</span>
+                <p className="muted">
+                  an der Seite <Link href={`/pages/${a.pageId}`}>{a.pageTitle}</Link>
+                </p>
+                <small className="muted">
+                  <Location spaceName={a.spaceName} path={a.path} /> · geändert {formatDate(a.updatedAt)}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {hasMore && (
         <p>

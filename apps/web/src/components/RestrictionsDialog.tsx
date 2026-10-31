@@ -58,7 +58,30 @@ export function RestrictionsDialog({ page, onDone, onCancel }: { page: PageDto; 
   const directory = useApiData<DirectoryDto>('/directory');
   const [view, setView] = useState<SubjectDto[]>([]);
   const [edit, setEdit] = useState<SubjectDto[]>([]);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
+
+  // Hinzugefügte Einträge gelten erst nach dem Speichern: beim Verlassen der Seite warnen (N-3)
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  const changeView = (next: SubjectDto[]) => {
+    setView(next);
+    setDirty(true);
+  };
+  const changeEdit = (next: SubjectDto[]) => {
+    setEdit(next);
+    setDirty(true);
+  };
+
+  function cancel() {
+    if (dirty && !window.confirm('Die Änderungen an den Einschränkungen sind noch nicht gespeichert. Verwerfen?')) return;
+    onCancel();
+  }
 
   useEffect(() => {
     if (!current.data) return;
@@ -71,6 +94,7 @@ export function RestrictionsDialog({ page, onDone, onCancel }: { page: PageDto; 
     const refs = (list: SubjectDto[]) => list.map(({ type, id }) => ({ type, id }));
     try {
       await api(`/pages/${page.id}/restrictions`, { method: 'PUT', body: { view: refs(view), edit: refs(edit) } });
+      setDirty(false);
       onDone();
     } catch (err) {
       setError(errorMessage(err));
@@ -94,16 +118,21 @@ export function RestrictionsDialog({ page, onDone, onCancel }: { page: PageDto; 
           ))}
         </Alert>
       )}
-      <SubjectList type="view" subjects={view} directory={directory.data} onChange={setView} />
-      <SubjectList type="edit" subjects={edit} directory={directory.data} onChange={setEdit} />
+      <SubjectList type="view" subjects={view} directory={directory.data} onChange={changeView} />
+      <SubjectList type="edit" subjects={edit} directory={directory.data} onChange={changeEdit} />
       <Alert>{error}</Alert>
       <p className="row">
         <button className="small" onClick={save}>
           Einschränkungen speichern
         </button>
-        <button className="small secondary" onClick={onCancel}>
+        <button className="small secondary" onClick={cancel}>
           Abbrechen
         </button>
+        {dirty && (
+          <span className="unsaved" role="status">
+            Noch nicht gespeichert: Die Änderungen gelten erst nach „Einschränkungen speichern“.
+          </span>
+        )}
       </p>
     </div>
   );

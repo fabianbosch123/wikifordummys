@@ -212,7 +212,7 @@ export class McpService {
           return json({
             note: UNTRUSTED,
             hasMore: result.hasMore,
-            results: result.results.map((r) => ({ id: r.id, title: r.title, space: r.spaceKey, snippet: r.snippet.map((s) => s.text).join(''), updatedAt: r.updatedAt })),
+            results: result.results.map((r) => ({ id: r.id, title: r.title, path: r.path.join(' › '), space: r.spaceKey, snippet: r.snippet.map((s) => s.text).join(''), updatedAt: r.updatedAt })),
           });
         }),
     );

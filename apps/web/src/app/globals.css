@@ -320,3 +320,17 @@ fieldset.choices { border: 0; padding: 0; margin: 0; min-width: 0; display: grid
 .drawio-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--surface); }
 .drawio-status { margin: 0; padding: 8px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--border); }
 .drawio-frame { flex: 1; width: 100%; border: 0; }
+
+/* ---------- Hinweise aus dem Nutzer-Feedback (N-4, N-10, N-13) ---------- */
+
+.field-warning { display: block; margin-top: 4px; color: var(--warn); }
+.alert.notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.alert.notice .notice-error { flex-basis: 100%; color: var(--danger); }
+.empty-page { border: 1px dashed var(--border); border-radius: var(--radius); padding: 16px 20px; color: var(--muted); }
+.empty-page p { margin: 0 0 8px; }
+.empty-page p:last-child { margin-bottom: 0; }
+.search-path { overflow-wrap: anywhere; }
+.unsaved { color: var(--warn); }
+.duplicate-prompt { margin: 8px 0; }
+.duplicate-prompt p { margin: 0 0 8px; }
+.duplicate-prompt p:last-child { margin-bottom: 0; }

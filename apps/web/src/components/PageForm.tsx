@@ -8,6 +8,7 @@ import { resolveUploads, UploadStore } from '@/components/editor/uploads';
 import { Alert } from '@/components/ui';
 import { ApiError, errorMessage } from '@/lib/api';
 import { useHotkeys, withHotkey } from '@/lib/hotkeys';
+import { sameTitle } from '@/lib/tree';
 
 // Der Editor läuft nur im Browser
 const WikiEditor = dynamic(() => import('@/components/editor/Editor').then((m) => m.WikiEditor), {
@@ -28,10 +29,12 @@ interface Props {
    */
   onSubmit: (title: string, content: DocNode, force: boolean, files: Map<string, File>) => Promise<void>;
   onCancel: () => void;
+  /** Titel der anderen Seiten unter derselben Elternseite; bei gleichem Titel warnt das Formular */
+  siblingTitles?: string[];
 }
 
 /** Titel und Editor mit Speichern, Konfliktanzeige und Warnung vor ungespeicherten Änderungen */
-export function PageForm({ initialTitle, initialContent, tree, pageId, submitLabel, onSubmit, onCancel }: Props) {
+export function PageForm({ initialTitle, initialContent, tree, pageId, submitLabel, onSubmit, onCancel, siblingTitles = [] }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const content = useRef<DocNode>(initialContent);
   const [dirty, setDirty] = useState(false);
@@ -49,9 +52,17 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
+  const duplicate = title.trim() !== '' && !sameTitle(title, initialTitle) && siblingTitles.some((t) => sameTitle(t, title));
+  // Einmal bestätigt, fragt das Formular für diesen Titel nicht noch einmal
+  const confirmedDuplicate = useRef('');
+
   async function save(force = false) {
     // Halb hochgeladene Dateien hätten nur Platzhalter im Inhalt
     if (uploads.busy) return;
+    if (duplicate && confirmedDuplicate.current !== title.trim()) {
+      if (!window.confirm(`Unter derselben Seite gibt es schon eine Seite „${title.trim()}“. Trotzdem mit diesem Titel speichern?`)) return;
+      confirmedDuplicate.current = title.trim();
+    }
     setBusy(true);
     setError('');
     try {
@@ -96,7 +107,13 @@ export function PageForm({ initialTitle, initialContent, tree, pageId, submitLab
             setTitle(e.target.value);
             setDirty(true);
           }}
+          aria-describedby={duplicate ? 'page-title-duplicate' : undefined}
         />
+        {duplicate && (
+          <small id="page-title-duplicate" className="field-warning" role="status">
+            Unter derselben Seite gibt es schon eine Seite mit diesem Titel. Ein anderer Titel hilft beim Wiederfinden.
+          </small>
+        )}
       </div>
       <WikiEditor
         initial={initialContent}
