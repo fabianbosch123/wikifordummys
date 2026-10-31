@@ -8,9 +8,12 @@ import {
   type CreatedApiTokenDto,
   type MyApiTokensDto,
 } from '@wiki/shared';
+import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useId, useState } from 'react';
+import { CopyButtons } from '@/components/CopyButtons';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 export const SCOPE_LABEL: Record<ApiTokenScope, string> = {
   read: 'Nur lesen',
@@ -39,6 +42,7 @@ function claudeCodeCommand(endpoint: string, token: string) {
 
 /** API-Tokens für Claude (MCP-Server) im Profil: anlegen (mit 2FA-Code), ansehen, widerrufen */
 export function ApiTokens() {
+  const isAdmin = useAuth().state?.user?.isAdmin ?? false;
   const scopeId = useId();
   const lifetimeId = useId();
   const [data, setData] = useState<MyApiTokensDto | null>(null);
@@ -75,8 +79,13 @@ export function ApiTokens() {
     }
   }
 
-  if (!data) return null;
-  if (!data.enabled && data.tokens.length === 0) return null;
+  if (!data) {
+    return error ? (
+      <Card title="Claude und andere KI-Assistenten (MCP)">
+        <Alert>{error}</Alert>
+      </Card>
+    ) : null;
+  }
 
   return (
     <Card title="Claude und andere KI-Assistenten (MCP)">
@@ -89,13 +98,32 @@ export function ApiTokens() {
         In claude.ai (Web, App, Projekte) fügst du das Wiki unter Einstellungen → Connectors als eigenen Connector mit dieser Adresse hinzu. Ein Token
         brauchst du dafür nicht: Claude leitet dich zur Anmeldung ins Wiki, und die Verbindung erscheint danach hier in der Liste.
       </p>
-      {!data.enabled && <Alert kind="info">Der MCP-Zugang ist in der Administration ausgeschaltet; vorhandene Tokens funktionieren gerade nicht.</Alert>}
+      {/* Auch bei ausgeschaltetem MCP sichtbar, damit niemand vergeblich nach den Tokens sucht (Rundgang 2, N-4) */}
+      {!data.enabled && (
+        <Alert kind="info">
+          Der MCP-Zugang ist ausgeschaltet, deshalb kannst du gerade keine Tokens anlegen
+          {data.tokens.length > 0 ? ', und vorhandene Tokens funktionieren nicht' : ''}.{' '}
+          {isAdmin ? (
+            <>
+              Einschalten kannst du ihn unter <Link href="/admin/api">Administration → Claude (MCP)</Link>.
+            </>
+          ) : (
+            'Einschalten kann ihn ein Administrator des Wikis unter Administration → Claude (MCP).'
+          )}
+        </Alert>
+      )}
 
       {created && (
         <div>
           <Alert kind="success">Token angelegt. Kopiere es jetzt, es wird nur dieses eine Mal angezeigt.</Alert>
           <Field label="Token" readOnly value={created.token} onFocus={(e) => e.target.select()} />
+          <p>
+            <CopyButtons text={created.token} label="Token kopieren" />
+          </p>
           <Field label="Für Claude Code" readOnly value={claudeCodeCommand(data.endpoint, created.token)} onFocus={(e) => e.target.select()} />
+          <p>
+            <CopyButtons text={claudeCodeCommand(data.endpoint, created.token)} label="Befehl kopieren" />
+          </p>
           <p className="muted">Anleitung für Claude Desktop und weitere Clients: docs/mcp.md im Repository.</p>
           <div className="row">
             <button type="button" className="secondary" onClick={() => setCreated(null)}>

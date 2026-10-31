@@ -9,6 +9,16 @@ import { Alert, Card, Field } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 
+/** Rückfrage vor dem Archivieren mit den Folgen für alle Benutzer */
+function archiveQuestion(name: string) {
+  return (
+    `Space „${name}“ archivieren?\n\n` +
+    'Danach kann niemand mehr Seiten anlegen, bearbeiten, verschieben oder löschen und keine Anhänge mehr hochladen, auch du nicht. ' +
+    'Der Space bleibt lesbar und erscheint in der Übersicht nur noch unter „Archiv“.\n\n' +
+    'Aufheben kannst du das jederzeit hier in den Space-Einstellungen.'
+  );
+}
+
 function SettingsForm({ space }: { space: SpaceDto }) {
   const [name, setName] = useState(space.name);
   const [description, setDescription] = useState(space.description);
@@ -56,7 +66,14 @@ function SettingsForm({ space }: { space: SpaceDto }) {
           Archivierte Spaces bleiben lesbar, können aber nicht mehr bearbeitet werden und erscheinen in der Übersicht nur unter „Archiv“.
         </p>
         {status === 'active' ? (
-          <button className="danger" onClick={() => patch({ status: 'archived' }, 'Der Space ist archiviert.')}>
+          <button
+            className="danger"
+            onClick={() => {
+              // Ein Fehlklick sperrt sonst alle Benutzer vom Schreiben aus (Rundgang 2, N-1); Aufheben geht ohne Rückfrage
+              if (!window.confirm(archiveQuestion(space.name))) return;
+              void patch({ status: 'archived' }, 'Der Space ist archiviert. Hier in den Einstellungen kannst du die Archivierung wieder aufheben.');
+            }}
+          >
             Space archivieren
           </button>
         ) : (

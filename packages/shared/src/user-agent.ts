@@ -11,7 +11,8 @@ const BROWSERS: [RegExp, string][] = [
   [/\bVivaldi\//, 'Vivaldi'],
   [/\bSamsungBrowser\//, 'Samsung Internet'],
   [/\bFirefox\/|\bFxiOS\//, 'Firefox'],
-  [/\bChrome\/|\bCriOS\/|\bChromium\//, 'Chrome'],
+  // „HeadlessChrome/…“ (automatisierte Browser) hat vor „Chrome“ keine Wortgrenze
+  [/\b(Headless)?Chrome\/|\bCriOS\/|\bChromium\//, 'Chrome'],
   [/\bSafari\//, 'Safari'],
   [/\bcurl\//, 'curl'],
 ];
