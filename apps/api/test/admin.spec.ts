@@ -68,6 +68,17 @@ describe('Benutzerverwaltung', () => {
     expect((await admin.client.post('/admin/users', { email: 'keine-adresse', displayName: 'Y' })).status).toBe(400);
   });
 
+  it('nennt eine offene Einladung beim Namen statt „bereits ein Konto“', async () => {
+    const created = await admin.client.post('/admin/users', { email: 'offen@example.de', displayName: 'Offen' });
+    expect(created.status).toBe(201);
+    const again = await admin.client.post('/admin/users', { email: 'offen@example.de', displayName: 'Offen' });
+    expect(again.status).toBe(409);
+    expect(again.body.error).toMatchObject({ code: 'ALREADY_INVITED', userId: created.body.user.id });
+    expect(again.body.error.message).toContain('Einladung offen');
+    const active = await admin.client.post('/admin/users', { email: 'admin@example.de', displayName: 'X' });
+    expect(active.body.error.code).toBe('CONFLICT');
+  });
+
   it('deaktiviert Konten und beendet deren Sitzungen', async () => {
     const anna = await createUser(ctx, 'anna@example.de', { ip: '10.0.0.5' });
     const res = await admin.client.patch(`/admin/users/${anna.userId}`, { status: 'deactivated' });

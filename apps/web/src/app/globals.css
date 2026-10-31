@@ -320,3 +320,8 @@ fieldset.choices { border: 0; padding: 0; margin: 0; min-width: 0; display: grid
 .drawio-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--surface); }
 .drawio-status { margin: 0; padding: 8px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--border); }
 .drawio-frame { flex: 1; width: 100%; border: 0; }
+
+/* Nicht gefunden (N-17) und Kopieren-Knöpfe (N-15) */
+.not-found { padding-top: 24px; }
+.not-found form input { flex: 1 1 180px; min-width: 0; }
+.copy-buttons { display: inline-flex; vertical-align: middle; }

@@ -1,12 +1,14 @@
 'use client';
 
-import { checkPasswordPolicy, THEME_PREFERENCES, type MeDto, type SessionInfoDto } from '@wiki/shared';
+import { checkPasswordPolicy, describeUserAgent, THEME_PREFERENCES, type MeDto, type SessionInfoDto } from '@wiki/shared';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiTokens } from '@/components/ApiTokens';
 import { RecoveryCodes } from '@/components/RecoveryCodes';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth, useAuth } from '@/lib/auth';
+import { setFlash } from '@/lib/flash';
 import { THEME_LABELS } from '@/lib/theme';
 
 function ProfileForm({ user }: { user: MeDto }) {
@@ -153,7 +155,7 @@ function Sessions({ reloadKey }: { reloadKey: number }) {
             {sessions.map((s) => (
               <tr key={s.id}>
                 <td>
-                  <span title={s.userAgent}>{s.userAgent.slice(0, 60) || 'Unbekannt'}</span>{' '}
+                  <span title={s.userAgent}>{describeUserAgent(s.userAgent)}</span>{' '}
                   {s.current && <span className="badge ok">dieses Gerät</span>}
                 </td>
                 <td>{s.ip}</td>
@@ -215,6 +217,7 @@ function RecoveryCodesCard() {
 
 export default function ProfilePage() {
   const { refresh } = useAuth();
+  const router = useRouter();
   const [reloadKey, setReloadKey] = useState(0);
   return (
     <RequireAuth>
@@ -229,7 +232,10 @@ export default function ProfilePage() {
             <PasswordForm
               user={user}
               onChanged={async () => {
+                // Das Formular verschwindet mit dem Wechsel; die Meldung erscheint deshalb auf der Startseite
+                setFlash('Passwort geändert. Willkommen im Wiki!');
                 await refresh();
+                router.replace('/');
               }}
             />
           </>

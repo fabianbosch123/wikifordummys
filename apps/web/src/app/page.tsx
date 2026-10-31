@@ -8,6 +8,7 @@ import { Alert, Card, Field } from '@/components/ui';
 import { api, errorMessage } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
+import { useFlash } from '@/lib/flash';
 
 function CreateSpace() {
   const router = useRouter();
@@ -63,10 +64,12 @@ function CreateSpace() {
 function Spaces({ user }: { user: MeDto }) {
   const [archived, setArchived] = useState(false);
   const spaces = useApiData<SpaceDto[]>(`/spaces?status=${archived ? 'archived' : 'active'}`);
+  const flash = useFlash();
 
   return (
     <>
       <h1>Willkommen, {user.displayName}</h1>
+      {flash && <Alert kind="success">{flash}</Alert>}
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h2 style={{ margin: 0 }}>{archived ? 'Archivierte Spaces' : 'Spaces'}</h2>
         <button className="small secondary" onClick={() => setArchived(!archived)}>

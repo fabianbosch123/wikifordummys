@@ -6,8 +6,9 @@ import { useEffect, useState } from 'react';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RichText } from '@/components/RichText';
 import { SpaceLayout } from '@/components/SpaceLayout';
+import { NotFound } from '@/components/NotFound';
 import { Alert, Card, formatDate } from '@/components/ui';
-import { api, errorMessage } from '@/lib/api';
+import { api, errorMessage, isNotFound } from '@/lib/api';
 import { RequireAuth } from '@/lib/auth';
 import { useApiData } from '@/lib/data';
 
@@ -83,6 +84,7 @@ function History() {
     }
   }
 
+  if (isNotFound(page.error)) return <NotFound kind="page" />;
   if (page.error) return <Alert>{errorMessage(page.error)}</Alert>;
   if (!page.data || !versions.data) return <p className="muted">Lade …</p>;
   const p = page.data;

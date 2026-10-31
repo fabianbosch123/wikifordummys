@@ -2,30 +2,51 @@
 
 import type { AdminUserDto, GroupDto } from '@wiki/shared';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { CopyButtons } from '@/components/CopyButtons';
 import { Alert, Card, Field, formatDate } from '@/components/ui';
-import { api, errorMessage } from '@/lib/api';
+import { api, ApiError, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const STATUS_LABEL = { invited: 'eingeladen', active: 'aktiv', deactivated: 'deaktiviert' } as const;
 
-function InviteForm({ groups, onInvited }: { groups: GroupDto[]; onInvited: (link: string | null, email: string) => void }) {
+function InviteForm({ groups, onInvited }: { groups: GroupDto[]; onInvited: (link: string | null, email: string, again?: boolean) => void }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  // Offene Einladung für die eingegebene Adresse: Konto-ID für „Erneut einladen“
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  function reset() {
+    setEmail('');
+    setDisplayName('');
+    setGroupIds([]);
+    setPendingId(null);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setPendingId(null);
     try {
       const res = await api<{ inviteUrl: string | null; user: AdminUserDto }>('/admin/users', {
         method: 'POST',
         body: { email, displayName, groupIds },
       });
       onInvited(res.inviteUrl, res.user.email);
-      setEmail('');
-      setDisplayName('');
-      setGroupIds([]);
+      reset();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'ALREADY_INVITED' && err.body?.error.userId) setPendingId(err.body.error.userId);
+      setError(errorMessage(err));
+    }
+  }
+
+  async function reinvite(id: string) {
+    setError('');
+    try {
+      const res = await api<{ inviteUrl: string | null }>(`/admin/users/${encodeURIComponent(id)}/invite`, { method: 'POST' });
+      onInvited(res.inviteUrl, email, true);
+      reset();
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -53,6 +74,14 @@ function InviteForm({ groups, onInvited }: { groups: GroupDto[]; onInvited: (lin
           </fieldset>
         )}
         <Alert>{error}</Alert>
+        {pendingId && (
+          <p className="row">
+            <button type="button" className="small" onClick={() => reinvite(pendingId)}>
+              Erneut einladen
+            </button>
+            <span className="muted">Der bisherige Einladungslink wird dabei ungültig.</span>
+          </p>
+        )}
         <div className="row">
           <button type="submit">Einladung senden</button>
         </div>
@@ -101,9 +130,10 @@ export default function AdminUsersPage() {
     <>
       <InviteForm
         groups={groups}
-        onInvited={(link, email) => {
+        onInvited={(link, email, again) => {
+          const what = again ? 'Neue Einladung' : 'Einladung';
           setNotice({
-            text: link ? `Einladung für ${email} angelegt. Es ist kein Mailserver eingerichtet, bitte den Link selbst weitergeben:` : `Einladung an ${email} verschickt.`,
+            text: link ? `${what} für ${email} angelegt. Es ist kein Mailserver eingerichtet, bitte den Link selbst weitergeben:` : `${what} an ${email} verschickt.`,
             link: link ?? undefined,
           });
           void load();
@@ -111,7 +141,12 @@ export default function AdminUsersPage() {
       />
       {notice && (
         <Alert kind="success">
-          {notice.text} {notice.link && <code data-testid="invite-link">{notice.link}</code>}
+          {notice.text}{' '}
+          {notice.link && (
+            <>
+              <code data-testid="invite-link">{notice.link}</code> <CopyButtons text={notice.link} label="Link kopieren" />
+            </>
+          )}
         </Alert>
       )}
       <Alert>{error}</Alert>
